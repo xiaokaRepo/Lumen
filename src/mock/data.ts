@@ -30,6 +30,7 @@ export interface Mount {
 
 export interface Service {
   id: string
+  containerId?: string
   name: string
   displayName: string
   kind: ServiceKind

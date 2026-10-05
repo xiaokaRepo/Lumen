@@ -11,7 +11,7 @@ import {
 } from "@/lib/api"
 import type { SamplePoint } from "@/lib/live-sample"
 import type { IconRef } from "@/lib/icons"
-import { asList, normalizeServices } from "@/lib/snapshot"
+import { asList, normalizeServices, reconcileServices } from "@/lib/snapshot"
 import type { Service, ServiceStatus } from "@/mock/data"
 
 export interface ServiceMeta {
@@ -127,10 +127,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const refresh = React.useCallback(async () => {
     const snap = await api.snapshot()
     applyHost(snap.host)
-    setServices(normalizeServices(snap.services))
+    const incoming = normalizeServices(snap.services)
+    setServices((prev) => {
+      if (incoming.length === 0 && prev.length > 0 && snap.dockerError) {
+        return prev
+      }
+      return reconcileServices(prev, incoming)
+    })
     setDockerError(snap.dockerError || "")
     setSystemdNote(snap.systemdNote || "")
-    setError(snap.dockerError ? "Docker 不可用：" + snap.dockerError : "")
+    setError(
+      snap.dockerError && incoming.length === 0
+        ? "Docker 不可用：" + snap.dockerError
+        : ""
+    )
     setHomeOrderState((prev) => {
       const saved = snap.homeOrder ?? []
       const base = saved.length ? saved : prev
@@ -180,7 +190,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!authed) return
     const id = window.setInterval(() => {
-      refresh().catch((e: Error) => setError(e.message))
+      refresh().catch((e: Error) => {
+        setServices((current) => {
+          if (current.length === 0) setError(e.message)
+          return current
+        })
+      })
     }, 3000)
     return () => window.clearInterval(id)
   }, [authed, refresh])

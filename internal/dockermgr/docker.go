@@ -104,6 +104,7 @@ type Manager struct {
 	services []Service
 	stats    map[string]sample
 	errText  string
+	busy     bool
 }
 
 func New(st *store.Store, hostIP func() string) (*Manager, error) {
@@ -142,9 +143,23 @@ func (m *Manager) One(id string) (Service, bool) {
 }
 
 func (m *Manager) refresh() {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	m.mu.Lock()
+	if m.busy {
+		m.mu.Unlock()
+		return
+	}
+	m.busy = true
+	previous := append([]Service(nil), m.services...)
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.busy = false
+		m.mu.Unlock()
+	}()
+
+	listCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	list, err := m.cli.ContainerList(ctx, container.ListOptions{All: true})
+	list, err := m.cli.ContainerList(listCtx, container.ListOptions{All: true})
 	if err != nil {
 		m.mu.Lock()
 		m.errText = err.Error()
@@ -157,19 +172,27 @@ func (m *Manager) refresh() {
 	if m.hostIP != nil {
 		ip = m.hostIP()
 	}
+	known := indexServices(previous)
 	services := make([]Service, 0, len(list))
 	nextStats := map[string]sample{}
 	for _, c := range list {
-		if len(c.Names) > 0 && strings.HasSuffix(strings.TrimPrefix(c.Names[0], "/"), prevSuffix) {
+		name := containerName(c)
+		if name == "" || strings.HasSuffix(name, prevSuffix) {
 			continue
 		}
-		svc, stat := m.inspect(ctx, c.ID, meta, sleeps, ip)
+		itemCtx, itemCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		svc, stat, inspectErr := m.inspect(itemCtx, c.ID, meta, sleeps, ip)
+		itemCancel()
+		if inspectErr != nil {
+			svc = keepOrSummary(c, known, meta, sleeps, ip)
+			stat = sample{}
+		}
 		services = append(services, svc)
 		if stat.at.Unix() != 0 {
 			nextStats[svc.ID] = stat
 		}
 	}
-	sort.Slice(services, func(i, j int) bool {
+	sort.SliceStable(services, func(i, j int) bool {
 		return services[i].DisplayName < services[j].DisplayName
 	})
 	m.mu.Lock()
@@ -181,10 +204,162 @@ func (m *Manager) refresh() {
 
 func (m *Manager) RefreshNow() { m.refresh() }
 
-func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) (Service, sample) {
+func indexServices(list []Service) map[string]Service {
+	out := make(map[string]Service, len(list)*2)
+	for _, s := range list {
+		if s.Name != "" {
+			out[s.Name] = s
+		}
+		if s.ContainerID != "" {
+			out["cid:"+s.ContainerID] = s
+		}
+	}
+	return out
+}
+
+func containerName(c types.Container) string {
+	for _, raw := range c.Names {
+		name := strings.TrimPrefix(raw, "/")
+		if i := strings.LastIndex(name, "/"); i >= 0 {
+			name = name[i+1:]
+		}
+		if name != "" {
+			return name
+		}
+	}
+	if c.ID == "" {
+		return ""
+	}
+	if len(c.ID) > 12 {
+		return c.ID[:12]
+	}
+	return c.ID
+}
+
+func mapListState(state string) string {
+	switch state {
+	case "running":
+		return "running"
+	case "paused":
+		return "paused"
+	case "restarting":
+		return "restarting"
+	default:
+		return "exited"
+	}
+}
+
+// keepOrSummary keeps the last successful inspect for this container. A failed
+// inspect must not replace it with a row named by the container id. With no
+// previous inspect, the list summary still supplies the name, image, and state.
+func keepOrSummary(c types.Container, known map[string]Service, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) Service {
+	name := containerName(c)
+	if old, ok := known[name]; ok && old.Image != "" && old.ID == name {
+		old.Status = mapListState(c.State)
+		old.ContainerID = c.ID
+		return old
+	}
+	if old, ok := known["cid:"+c.ID]; ok && old.Image != "" && old.ID != "" && old.ID != c.ID {
+		old.Status = mapListState(c.State)
+		old.ContainerID = c.ID
+		return old
+	}
+	return serviceFromSummary(c, meta, sleeps, hostIP)
+}
+
+func serviceFromSummary(c types.Container, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) Service {
+	name := containerName(c)
+	md := meta[name]
+	project := ""
+	if c.Labels != nil {
+		project = c.Labels["com.docker.compose.project"]
+	}
+	kind := "container"
+	if project != "" {
+		kind = "compose"
+	}
+	display := md.DisplayName
+	if display == "" {
+		svc := ""
+		if c.Labels != nil {
+			svc = c.Labels["com.docker.compose.service"]
+		}
+		if svc != "" {
+			display = title(svc)
+		} else {
+			display = title(name)
+		}
+	}
+	group := md.Group
+	if group == "" {
+		group = "未分组"
+	}
+	ports := portsFromList(c.Ports)
+	web := md.WebURL
+	if web == "" {
+		for _, p := range ports {
+			if p.Web {
+				web = "http://" + hostIP + ":" + itoa(p.Host)
+				break
+			}
+		}
+	}
+	svc := Service{
+		ID:           name,
+		ContainerID:  c.ID,
+		Name:         name,
+		DisplayName:  display,
+		Kind:         kind,
+		Stack:        project,
+		Group:        group,
+		Status:       mapListState(c.State),
+		Image:        c.Image,
+		IconMatch:    c.Image,
+		IconOverride: md.IconOverride,
+		Ports:        ports,
+		WebURL:       web,
+		RemoteURL:    md.RemoteURL,
+		NetworkMode:  c.HostConfig.NetworkMode,
+		Description:  md.Description,
+		HideOnHome:   md.HideOnHome,
+		IdleSleep:    md.IdleSleep,
+		Uptime:       c.Status,
+	}
+	if rec, ok := sleeps[name]; ok {
+		applySleep(&svc, rec)
+	}
+	return svc
+}
+
+func portsFromList(in []types.Port) []PortBinding {
+	out := make([]PortBinding, 0, len(in))
+	for _, p := range in {
+		if p.PublicPort == 0 {
+			continue
+		}
+		proto := p.Type
+		if proto == "" {
+			proto = "tcp"
+		}
+		ip := p.IP
+		if ip == "" {
+			ip = "0.0.0.0"
+		}
+		out = append(out, PortBinding{
+			Host:      int(p.PublicPort),
+			Container: int(p.PrivatePort),
+			Proto:     proto,
+			IP:        ip,
+			Web:       proto == "tcp",
+		})
+	}
+	return out
+}
+
+func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) (Service, sample, error) {
 	info, err := m.cli.ContainerInspect(ctx, id)
 	if err != nil {
-		return Service{ID: id, Name: id, DisplayName: id, Kind: "container", Group: "未分组", Status: "exited", IconMatch: id, Ports: []PortBinding{}}, sample{}
+		return Service{}, sample{}, err
 	}
 	name := strings.TrimPrefix(info.Name, "/")
 	md := meta[name]
@@ -268,7 +443,9 @@ func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.
 	if rec, ok := sleeps[name]; ok {
 		applySleep(&svc, rec)
 	}
-	stat := m.stat(ctx, name, status)
+	statCtx, statCancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	stat := m.stat(statCtx, name, status)
+	statCancel()
 	svc.CPU = round1(stat.cpu)
 	svc.MemMB = round1(float64(stat.mem) / 1024 / 1024)
 	if stat.lim > 0 {
@@ -294,7 +471,7 @@ func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.
 			}
 		}
 	}
-	return svc, stat
+	return svc, stat, nil
 }
 
 func (m *Manager) stat(ctx context.Context, id, status string) sample {
