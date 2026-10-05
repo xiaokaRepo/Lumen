@@ -92,6 +92,7 @@ export const api = {
       dockerError: string
       systemdNote?: string
       homeOrder?: string[]
+      cardFields?: CardFields
     }>(await fetch("/api/snapshot", { credentials: "include" })),
   logs: async (id: string) =>
     parse<{ lines: LogLine[] }>(
@@ -275,6 +276,29 @@ export const api = {
         body: JSON.stringify({ ids }),
       })
     ),
+  saveCardFields: async (cardFields: CardFields) =>
+    parse<{ ok: boolean; cardFields: CardFields }>(
+      await fetch("/api/home", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardFields }),
+      })
+    ),
+}
+
+export interface CardFields {
+  status: boolean
+  usage: boolean
+  uptime: boolean
+  update: boolean
+}
+
+export const DEFAULT_CARD_FIELDS: CardFields = {
+  status: true,
+  usage: true,
+  uptime: true,
+  update: true,
 }
 
 export interface Channel {

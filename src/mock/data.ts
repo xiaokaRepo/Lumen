@@ -63,6 +63,7 @@ export interface Service {
   lastError?: string
   hideOnHome?: boolean
   sleeping?: boolean
+  sleepFor?: string
   idleSleep?: boolean
 }
 

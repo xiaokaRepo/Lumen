@@ -72,6 +72,16 @@ func TestReleaseWebBindingKeepsContainer(t *testing.T) {
 	t.Fatalf("container port not reachable: %v brief=%+v", last, brief)
 }
 
+func TestFormatSince(t *testing.T) {
+	if formatSince(0) != "" {
+		t.Fatal(formatSince(0))
+	}
+	got := formatSince(time.Now().Add(-2 * time.Hour).Unix())
+	if got != "2 小时" {
+		t.Fatal(got)
+	}
+}
+
 func TestPublishConflictMessage(t *testing.T) {
 	m := &Manager{services: []Service{
 		{ID: "a", Name: "a", Status: "running", Ports: []PortBinding{{Host: 8088, Proto: "tcp", IP: "0.0.0.0"}}},
