@@ -59,10 +59,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { api, type Proc } from "@/lib/api"
 import { fmtMem, fmtPct } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { host, processes, type Proc } from "@/mock/data"
 
 const STATE_LABEL: Record<Proc["state"], string> = {
   R: "运行",
@@ -71,8 +71,6 @@ const STATE_LABEL: Record<Proc["state"], string> = {
   T: "已停止",
   Z: "僵尸",
 }
-const PROTECTED = new Set([1, 1251, 1134, 412, 4102])
-
 type SortKey = "cpu" | "memMB" | "pid"
 
 function SortHead({
@@ -105,15 +103,43 @@ function SortHead({
 }
 
 export function ProcessesPage() {
-  const state = useViewState()
-  const { services } = useStore()
+  const preview = useViewState()
+  const { services, host, systemdNote } = useStore()
   const byId = Object.fromEntries(services.map((s) => [s.id, s]))
+  const [rows, setRows] = React.useState<Proc[] | null>(null)
+  const [err, setErr] = React.useState("")
   const [q, setQ] = React.useState("")
   const [sort, setSort] = React.useState<SortKey>("cpu")
   const [onlyContainers, setOnlyContainers] = React.useState(false)
   const [kill, setKill] = React.useState<{ p: Proc; sig: string } | null>(null)
   const [renice, setRenice] = React.useState<Proc | null>(null)
   const [nice, setNice] = React.useState(0)
+
+  const load = React.useCallback(() => {
+    api
+      .processes()
+      .then((d) => {
+        setRows(d.processes)
+        setErr("")
+      })
+      .catch((e: Error) => setErr(e.message))
+  }, [])
+
+  React.useEffect(() => {
+    load()
+    const t = window.setInterval(load, 5000)
+    return () => window.clearInterval(t)
+  }, [load])
+
+  const processes = rows ?? []
+  const state =
+    preview !== "ready"
+      ? preview
+      : err
+        ? "error"
+        : rows === null
+          ? "loading"
+          : "ready"
 
   const list = processes
     .filter(
@@ -130,7 +156,7 @@ export function ProcessesPage() {
     <>
       <PageHeader
         title="进程"
-        description={`主机共 214 个进程，负载 ${host.load.join(" / ")}。通过 pid: host 读取，包含容器内进程。`}
+        description={`${rows === null ? "" : `主机共 ${processes.length} 个进程，负载 ${host.load.join(" / ")}。`}${systemdNote || "通过 pid: host 读取，包含容器内进程。"}`}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -156,7 +182,7 @@ export function ProcessesPage() {
           </Label>
         </div>
         <span className="text-xs text-muted-foreground sm:ml-auto">
-          每 3 秒刷新，显示前 {list.length} 个
+          每 5 秒刷新，{list.length} 个
         </span>
       </div>
 
@@ -201,7 +227,7 @@ export function ProcessesPage() {
             <TableBody>
               {list.map((p) => {
                 const s = p.serviceId ? byId[p.serviceId] : undefined
-                const prot = PROTECTED.has(p.pid)
+                const prot = !!p.protected
                 return (
                   <TableRow key={p.pid}>
                     <TableCell className="tabular pl-4 text-muted-foreground">
@@ -313,6 +339,12 @@ export function ProcessesPage() {
                             暂停 (SIGSTOP)
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            disabled={prot || p.state !== "T"}
+                            onSelect={() => setKill({ p, sig: "SIGCONT" })}
+                          >
+                            继续 (SIGCONT)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             disabled={prot}
                             onSelect={() => setKill({ p, sig: "SIGTERM" })}
                           >
@@ -360,9 +392,17 @@ export function ProcessesPage() {
                   : "default"
               }
               onClick={() => {
-                toast.success(`已发送 ${kill?.sig}`, {
-                  description: `kill -${kill?.sig.replace("SIG", "")} ${kill?.p.pid}`,
-                })
+                if (!kill) return
+                const { p, sig } = kill
+                api
+                  .signal(p.pid, sig)
+                  .then(() => {
+                    toast.success(`已发送 ${sig}`, {
+                      description: `kill -${sig.replace("SIG", "")} ${p.pid}`,
+                    })
+                    load()
+                  })
+                  .catch((e: Error) => toast.error(e.message))
                 setKill(null)
               }}
             >
@@ -409,9 +449,17 @@ export function ProcessesPage() {
             </Button>
             <Button
               onClick={() => {
-                toast.success("优先级已调整", {
-                  description: `renice -n ${nice} -p ${renice?.pid}`,
-                })
+                if (!renice) return
+                const pid = renice.pid
+                api
+                  .renice(pid, nice)
+                  .then(() => {
+                    toast.success("优先级已调整", {
+                      description: `renice -n ${nice} -p ${pid}`,
+                    })
+                    load()
+                  })
+                  .catch((e: Error) => toast.error(e.message))
                 setRenice(null)
               }}
             >

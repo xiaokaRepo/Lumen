@@ -4,11 +4,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/xiaokaRepo/lumen/internal/dockermgr"
 	"github.com/xiaokaRepo/lumen/internal/hoststat"
 	"github.com/xiaokaRepo/lumen/internal/httpapi"
+	"github.com/xiaokaRepo/lumen/internal/metrics"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
@@ -31,11 +33,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	history := metrics.Open(filepath.Join(data, "metrics.json"))
+	go sampleHistory(history, host, docker)
 	srv := &httpapi.Server{
-		Store:  st,
-		Host:   host,
-		Docker: docker,
-		Static: os.Getenv("LUMEN_STATIC"),
+		Store:   st,
+		Host:    host,
+		Docker:  docker,
+		History: history,
+		Static:  os.Getenv("LUMEN_STATIC"),
 	}
 	httpSrv := &http.Server{
 		Addr:              addr,
@@ -44,6 +49,53 @@ func main() {
 	}
 	log.Printf("Lumen listening on %s", addr)
 	log.Fatal(httpSrv.ListenAndServe())
+}
+
+func sampleHistory(h *metrics.History, host *hoststat.Sampler, docker *dockermgr.Manager) {
+	var prevR, prevW uint64
+	var prevAt time.Time
+	take := func() {
+		snap := host.Current()
+		mem := 0.0
+		if snap.MemTotalGB > 0 {
+			mem = snap.MemUsedGB / snap.MemTotalGB * 100
+		}
+		rd, wr := 0.0, 0.0
+		read, write := hoststat.DiskBytes()
+		now := time.Now()
+		if !prevAt.IsZero() {
+			dt := now.Sub(prevAt).Seconds()
+			if dt > 0 {
+				if read >= prevR {
+					rd = float64(read-prevR) / dt / 1024 / 1024
+				}
+				if write >= prevW {
+					wr = float64(write-prevW) / dt / 1024 / 1024
+				}
+			}
+		}
+		prevR, prevW, prevAt = read, write, now
+		samples := []metrics.Sample{{
+			ID: "host", CPU: snap.CPUPercent, Mem: mem,
+			Rx: snap.NetRxMBs, Tx: snap.NetTxMBs, Rd: rd, Wr: wr,
+		}}
+		svcs, _ := docker.Services()
+		for _, s := range svcs {
+			samples = append(samples, metrics.Sample{
+				ID: s.ID, CPU: s.CPU, Mem: s.MemMB,
+				Rx: s.NetRxKBs, Tx: s.NetTxKBs,
+				Rd: s.DiskReadKBs / 1024, Wr: s.DiskWriteKBs / 1024,
+			})
+		}
+		h.Add(samples)
+		h.Flush()
+	}
+	take()
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		take()
+	}
 }
 
 func getenv(k, def string) string {

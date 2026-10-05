@@ -12,14 +12,16 @@ import (
 
 	"github.com/xiaokaRepo/lumen/internal/dockermgr"
 	"github.com/xiaokaRepo/lumen/internal/hoststat"
+	"github.com/xiaokaRepo/lumen/internal/metrics"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
 type Server struct {
-	Store  *store.Store
-	Host   *hoststat.Sampler
-	Docker *dockermgr.Manager
-	Static string
+	Store   *store.Store
+	Host    *hoststat.Sampler
+	Docker  *dockermgr.Manager
+	History *metrics.History
+	Static  string
 }
 
 func (s *Server) Handler() http.Handler {
@@ -33,6 +35,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/services/{id}/action", s.authed(s.action))
 	mux.HandleFunc("PUT /api/services/{id}", s.authed(s.putMeta))
 	mux.HandleFunc("GET /api/ports", s.authed(s.ports))
+	mux.HandleFunc("GET /api/processes", s.authed(s.processes))
+	mux.HandleFunc("POST /api/processes/{pid}/signal", s.authed(s.signal))
+	mux.HandleFunc("POST /api/processes/{pid}/nice", s.authed(s.renice))
+	mux.HandleFunc("GET /api/systemd", s.authed(s.systemd))
+	mux.HandleFunc("GET /api/metrics", s.authed(s.metrics))
+	mux.HandleFunc("GET /api/images", s.authed(s.images))
+	mux.HandleFunc("POST /api/images/pull", s.authed(s.pullImage))
+	mux.HandleFunc("POST /api/images/prune", s.authed(s.pruneImages))
+	mux.HandleFunc("DELETE /api/images/{id}", s.authed(s.deleteImage))
+	mux.HandleFunc("GET /api/networks", s.authed(s.networks))
+	mux.HandleFunc("POST /api/networks", s.authed(s.createNetwork))
+	mux.HandleFunc("DELETE /api/networks/{id}", s.authed(s.deleteNetwork))
+	mux.HandleFunc("GET /api/volumes", s.authed(s.volumes))
+	mux.HandleFunc("POST /api/volumes/prune", s.authed(s.pruneVolumes))
+	mux.HandleFunc("DELETE /api/volumes/{id}", s.authed(s.deleteVolume))
+	mux.HandleFunc("POST /api/stacks/{id}/action", s.authed(s.stack))
 	if s.Static != "" {
 		mux.Handle("/", s.spa())
 	}
@@ -111,14 +129,72 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 	services, errText := s.Docker.Services()
-	if services == nil {
-		services = []dockermgr.Service{}
+	out := make([]any, 0, len(services)+8)
+	for _, svc := range services {
+		out = append(out, svc)
+	}
+	units, note := hoststat.SystemdUnits()
+	for _, u := range units {
+		if !includeUnit(u) {
+			continue
+		}
+		name := strings.TrimSuffix(u.Name, ".service")
+		status := "exited"
+		if u.Active == "active" && (u.Sub == "running" || u.Sub == "active") {
+			status = "running"
+		} else if u.Active == "activating" || u.Active == "reloading" {
+			status = "restarting"
+		}
+		out = append(out, map[string]any{
+			"id":          "unit:" + u.Name,
+			"name":        name,
+			"displayName": name,
+			"kind":        "systemd",
+			"group":       "系统",
+			"status":      status,
+			"iconMatch":   name,
+			"ports":       []any{},
+			"cpu":         0,
+			"memMB":       0,
+			"netRxKBs":    0,
+			"netTxKBs":    0,
+			"uptime":      "",
+			"unit":        u.Name,
+			"description": u.Description,
+			"lastError":   unitError(u),
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"host":        s.Host.Current(),
-		"services":    services,
+		"services":    out,
 		"dockerError": errText,
+		"systemdNote": note,
 	})
+}
+
+func includeUnit(u hoststat.Unit) bool {
+	if u.Load != "loaded" {
+		return false
+	}
+	if u.Active != "active" && u.Active != "failed" && u.Active != "activating" {
+		return false
+	}
+	name := u.Name
+	if strings.HasPrefix(name, "systemd-") || strings.Contains(name, "getty") {
+		return false
+	}
+	switch name {
+	case "docker.service", "containerd.service", "dbus.service", "cron.service", "rsyslog.service":
+		return false
+	}
+	return true
+}
+
+func unitError(u hoststat.Unit) string {
+	if u.Active == "failed" {
+		return u.Description
+	}
+	return ""
 }
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +223,14 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if strings.HasPrefix(id, "unit:") {
+		if err := hoststat.SystemdAction(strings.TrimPrefix(id, "unit:"), body.Action); err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
 	if err := s.Docker.Action(r.Context(), id, body.Action, body.RemoveVolumes); err != nil {
@@ -201,6 +285,195 @@ func (s *Server) ports(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
+}
+
+func (s *Server) processes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"processes": hoststat.Processes(s.Docker.ContainerIDs()),
+	})
+}
+
+func (s *Server) signal(w http.ResponseWriter, r *http.Request) {
+	pid := atoi(r.PathValue("pid"))
+	var body struct {
+		Signal string `json:"signal"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if err := hoststat.Signal(pid, body.Signal); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) renice(w http.ResponseWriter, r *http.Request) {
+	pid := atoi(r.PathValue("pid"))
+	var body struct {
+		Nice int `json:"nice"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if err := hoststat.Renice(pid, body.Nice); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) systemd(w http.ResponseWriter, r *http.Request) {
+	units, note := hoststat.SystemdUnits()
+	writeJSON(w, http.StatusOK, map[string]any{"units": units, "note": note})
+}
+
+func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		id = "host"
+	}
+	if s.History == nil {
+		empty := []any{}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"cpu": empty, "mem": empty, "rx": empty, "tx": empty, "rd": empty, "wr": empty,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.History.Series(id, r.URL.Query().Get("range")))
+}
+
+func (s *Server) images(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.Docker.Images(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"images": rows})
+}
+
+func (s *Server) pullImage(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Ref string `json:"ref"`
+	}
+	if err := readJSON(r, &body); err != nil || strings.TrimSpace(body.Ref) == "" {
+		writeErr(w, http.StatusBadRequest, "需要镜像名，例如 nginx:alpine")
+		return
+	}
+	if err := s.Docker.Pull(r.Context(), strings.TrimSpace(body.Ref)); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) pruneImages(w http.ResponseWriter, r *http.Request) {
+	n, err := s.Docker.PruneImages(r.Context())
+	if err != nil && n == 0 {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"removed": n})
+}
+
+func (s *Server) deleteImage(w http.ResponseWriter, r *http.Request) {
+	if err := s.Docker.RemoveImage(r.Context(), r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.Docker.Networks(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"networks": rows})
+}
+
+func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name   string `json:"name"`
+		Driver string `json:"driver"`
+		Subnet string `json:"subnet"`
+	}
+	if err := readJSON(r, &body); err != nil || strings.TrimSpace(body.Name) == "" {
+		writeErr(w, http.StatusBadRequest, "需要网络名称")
+		return
+	}
+	driver := body.Driver
+	if driver == "" {
+		driver = "bridge"
+	}
+	if err := s.Docker.CreateNetwork(r.Context(), strings.TrimSpace(body.Name), driver, strings.TrimSpace(body.Subnet)); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) deleteNetwork(w http.ResponseWriter, r *http.Request) {
+	if err := s.Docker.RemoveNetwork(r.Context(), r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) volumes(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.Docker.Volumes(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"volumes": rows})
+}
+
+func (s *Server) pruneVolumes(w http.ResponseWriter, r *http.Request) {
+	n, err := s.Docker.PruneVolumes(r.Context())
+	if err != nil && n == 0 {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"removed": n})
+}
+
+func (s *Server) deleteVolume(w http.ResponseWriter, r *http.Request) {
+	if err := s.Docker.RemoveVolume(r.Context(), r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) stack(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if err := s.Docker.StackAction(r.Context(), r.PathValue("id"), body.Action); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 func (s *Server) authed(next http.HandlerFunc) http.HandlerFunc {

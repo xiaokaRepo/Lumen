@@ -762,6 +762,7 @@ export interface Proc {
   started: string
   command: string
   serviceId?: string
+  protected?: boolean
 }
 
 export const processes: Proc[] = [

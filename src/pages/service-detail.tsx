@@ -83,32 +83,40 @@ function Stat({
   )
 }
 
-function stamp() {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, "0")
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
-
-function useFollow(value: number) {
-  const [data, setData] = React.useState(() => [{ t: stamp(), v: value }])
-  const prev = React.useRef(value)
-  React.useEffect(() => {
-    if (prev.current === value) return
-    prev.current = value
-    setData((d) => [...d, { t: stamp(), v: value }].slice(-60))
-  }, [value])
-  return data
-}
-
 function Monitor({ s }: { s: Service }) {
   const { host } = useStore()
   const [range, setRange] = React.useState("1h")
-  const cpu = useFollow(s.cpu)
-  const mem = useFollow(s.memMB)
-  const rx = useFollow(s.netRxKBs)
-  const tx = useFollow(s.netTxKBs)
-  const rd = useFollow((s.diskReadKBs ?? 0) / 1024)
-  const wr = useFollow((s.diskWriteKBs ?? 0) / 1024)
+  const [hist, setHist] = React.useState<{
+    cpu: { t: string; v: number }[]
+    mem: { t: string; v: number }[]
+    rx: { t: string; v: number }[]
+    tx: { t: string; v: number }[]
+    rd: { t: string; v: number }[]
+    wr: { t: string; v: number }[]
+  } | null>(null)
+  React.useEffect(() => {
+    let stop = false
+    const load = () => {
+      api
+        .metrics(s.id, range)
+        .then((d) => {
+          if (!stop) setHist(d)
+        })
+        .catch(() => {})
+    }
+    load()
+    const t = window.setInterval(load, 15000)
+    return () => {
+      stop = true
+      window.clearInterval(t)
+    }
+  }, [s.id, range])
+  const cpu = hist?.cpu ?? []
+  const mem = hist?.mem ?? []
+  const rx = hist?.rx ?? []
+  const tx = hist?.tx ?? []
+  const rd = hist?.rd ?? []
+  const wr = hist?.wr ?? []
   const limit =
     s.memLimitMB &&
     host.memTotalGB > 0 &&
