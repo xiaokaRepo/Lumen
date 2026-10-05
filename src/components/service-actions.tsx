@@ -40,7 +40,7 @@ import type { Service } from "@/mock/data"
 type Confirm = "stop" | "remove" | null
 
 export function useServiceActions(s: Service) {
-  const { flashStatus } = useStore()
+  const { flashStatus, act } = useStore()
   const [confirm, setConfirm] = React.useState<Confirm>(null)
   const [edit, setEdit] = React.useState(false)
   const [removeVolumes, setRemoveVolumes] = React.useState(false)
@@ -48,20 +48,54 @@ export function useServiceActions(s: Service) {
   const isNative = s.kind === "systemd" || s.kind === "process"
   const upd = updateFor(s.id)
 
-  const restart = () => {
-    if (restarting) return
-    setRestarting(true)
-    flashStatus(s.id, "restarting")
-    window.setTimeout(() => setRestarting(false), 360)
-    run("重启")
+  const perform = async (
+    action: string,
+    label: string,
+    opts?: { removeVolumes?: boolean }
+  ) => {
+    if (isNative) {
+      toast.error("主机进程和 systemd 会在下一期接入")
+      return
+    }
+    const started = performance.now()
+    if (action === "restart") {
+      if (restarting) return
+      setRestarting(true)
+      flashStatus(s.id, "restarting")
+    }
+    try {
+      await act(s.id, action, opts)
+      const wait = 280 - (performance.now() - started)
+      if (action === "restart" && wait > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, wait))
+      }
+      toast.success(`${label}：${s.displayName}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "操作失败")
+    } finally {
+      if (action === "restart") setRestarting(false)
+    }
   }
 
-  const run = (label: string) =>
-    toast.success(`${label}：${s.displayName}`, {
-      description: isNative
-        ? `systemctl ${label === "重启" ? "restart" : "stop"} ${s.unit ?? s.name}`
-        : `docker ${label === "重启" ? "restart" : label === "停止" ? "stop" : label === "暂停" ? "pause" : "start"} ${s.name}`,
+  const restart = () => {
+    void perform("restart", "重启")
+  }
+
+  const run = (label: string) => {
+    const action =
+      label === "停止"
+        ? "stop"
+        : label === "删除"
+          ? "remove"
+          : label === "暂停"
+            ? "pause"
+            : label === "恢复"
+              ? "unpause"
+              : "start"
+    void perform(action, label, {
+      removeVolumes: label === "删除" ? removeVolumes : false,
     })
+  }
 
   const dialogs = (
     <>

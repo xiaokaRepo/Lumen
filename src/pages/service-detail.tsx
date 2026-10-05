@@ -56,9 +56,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { KIND_LABEL } from "@/lib/format"
-import { useService } from "@/lib/store"
+import { useService, useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { logsFor, portConflicts, series, zip, type Service } from "@/mock/data"
+import { api, type LogLine } from "@/lib/api"
+import { portConflicts } from "@/lib/ports"
+import { zip, type Service } from "@/mock/data"
 import { UpdateBadge } from "@/pages/services"
 
 function Stat({
@@ -81,59 +83,38 @@ function Stat({
   )
 }
 
-function useTail(seed: number, base: number, jitter: number, max: number) {
-  const [data, setData] = React.useState(() =>
-    series(seed, 60, base, jitter, 0, max)
-  )
+function stamp() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function useFollow(value: number) {
+  const [data, setData] = React.useState(() => [{ t: stamp(), v: value }])
+  const prev = React.useRef(value)
   React.useEffect(() => {
-    const id = window.setInterval(() => {
-      setData((prev) => {
-        const last = prev[prev.length - 1]?.v ?? base
-        const next = Math.min(
-          max,
-          Math.max(0, last + (Math.random() - 0.48) * jitter)
-        )
-        const d = new Date()
-        const p = (n: number) => String(n).padStart(2, "0")
-        const t = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-        return [...prev.slice(1), { t, v: Math.round(next * 10) / 10 }]
-      })
-    }, 2500)
-    return () => window.clearInterval(id)
-  }, [base, jitter, max])
+    if (prev.current === value) return
+    prev.current = value
+    setData((d) => [...d, { t: stamp(), v: value }].slice(-60))
+  }, [value])
   return data
 }
 
 function Monitor({ s }: { s: Service }) {
+  const { host } = useStore()
   const [range, setRange] = React.useState("1h")
-  const seed = s.id.length * 13
-  const cpu = useTail(
-    seed,
-    Math.max(s.cpu, 0.5),
-    Math.max(s.cpu * 0.4, 0.8),
-    100
-  )
-  const mem = useTail(seed + 3, s.memMB, Math.max(s.memMB * 0.04, 4), 100000)
-  const rx = useTail(
-    seed + 5,
-    s.netRxKBs,
-    Math.max(s.netRxKBs * 0.3, 8),
-    100000
-  )
-  const tx = useTail(
-    seed + 7,
-    s.netTxKBs,
-    Math.max(s.netTxKBs * 0.3, 8),
-    100000
-  )
-  const rd = useTail(seed + 9, 1.8, 0.6, 200)
-  const wr = useTail(seed + 11, 0.9, 0.4, 200)
-  const cpuNow = cpu[cpu.length - 1]?.v ?? s.cpu
-  const memNow = mem[mem.length - 1]?.v ?? s.memMB
-  const rxNow = rx[rx.length - 1]?.v ?? s.netRxKBs
-  const txNow = tx[tx.length - 1]?.v ?? s.netTxKBs
-  const rdNow = rd[rd.length - 1]?.v ?? 1.8
-  const wrNow = wr[wr.length - 1]?.v ?? 0.9
+  const cpu = useFollow(s.cpu)
+  const mem = useFollow(s.memMB)
+  const rx = useFollow(s.netRxKBs)
+  const tx = useFollow(s.netTxKBs)
+  const rd = useFollow((s.diskReadKBs ?? 0) / 1024)
+  const wr = useFollow((s.diskWriteKBs ?? 0) / 1024)
+  const limit =
+    s.memLimitMB &&
+    host.memTotalGB > 0 &&
+    s.memLimitMB < host.memTotalGB * 1024 * 0.9
+      ? `限制 ${Math.round(s.memLimitMB)} MB`
+      : "未设限制"
 
   if (s.status !== "running")
     return (
@@ -149,29 +130,32 @@ function Monitor({ s }: { s: Service }) {
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4 [&>*]:bg-card">
         <Stat
           label="CPU"
-          value={<NumberRoll value={cpuNow} suffix="%" />}
+          value={<NumberRoll value={s.cpu} suffix="%" />}
           sub="占 N100 4 线程"
         />
         <Stat
           label="内存"
-          value={<NumberRoll value={memNow} digits={0} suffix=" MB" />}
-          sub={s.memLimitMB ? `限制 ${s.memLimitMB} MB` : "未设限制"}
+          value={<NumberRoll value={s.memMB} digits={0} suffix=" MB" />}
+          sub={limit}
         />
         <Stat
           label="网络"
-          value={<NumberRoll value={txNow} digits={0} suffix=" KB/s" />}
+          value={<NumberRoll value={s.netTxKBs} digits={0} suffix=" KB/s" />}
           sub={
             <>
-              接收 <NumberRoll value={rxNow} digits={0} suffix=" KB/s" />
+              接收 <NumberRoll value={s.netRxKBs} digits={0} suffix=" KB/s" />
             </>
           }
         />
         <Stat
           label="磁盘读写"
-          value={<NumberRoll value={rdNow} suffix=" MB/s" />}
+          value={
+            <NumberRoll value={(s.diskReadKBs ?? 0) / 1024} suffix=" MB/s" />
+          }
           sub={
             <>
-              写入 <NumberRoll value={wrNow} suffix=" MB/s" />
+              写入{" "}
+              <NumberRoll value={(s.diskWriteKBs ?? 0) / 1024} suffix=" MB/s" />
             </>
           }
         />
@@ -254,7 +238,42 @@ function Logs({ s }: { s: Service }) {
   const [follow, setFollow] = React.useState(true)
   const [ts, setTs] = React.useState(true)
   const [q, setQ] = React.useState("")
-  const lines = logsFor(s).filter(
+  const [raw, setRaw] = React.useState<LogLine[]>([])
+  const [logError, setLogError] = React.useState("")
+  const box = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    let stop = false
+    const load = () => {
+      api
+        .logs(s.id)
+        .then((d) => {
+          if (!stop) {
+            setRaw(d.lines)
+            setLogError("")
+          }
+        })
+        .catch((e: Error) => {
+          if (!stop) setLogError(e.message)
+        })
+    }
+    load()
+    if (!follow)
+      return () => {
+        stop = true
+      }
+    const id = window.setInterval(load, 2000)
+    return () => {
+      stop = true
+      window.clearInterval(id)
+    }
+  }, [s.id, follow])
+
+  React.useEffect(() => {
+    if (follow && box.current) box.current.scrollTop = box.current.scrollHeight
+  }, [raw, follow])
+
+  const lines = raw.filter(
     (l) => !q || l.msg.toLowerCase().includes(q.toLowerCase())
   )
   return (
@@ -289,12 +308,22 @@ function Logs({ s }: { s: Service }) {
             : `docker logs ${s.name}`}
           ，最近 500 行
         </span>
-        <Button variant="outline" size="sm" className="ml-auto">
-          <IconDownload data-icon="inline-start" />
-          下载
+        <Button variant="outline" size="sm" className="ml-auto" asChild>
+          <a href={`/api/services/${encodeURIComponent(s.id)}/logs?download=1`}>
+            <IconDownload data-icon="inline-start" />
+            下载
+          </a>
         </Button>
       </div>
-      <div className="max-h-[420px] overflow-auto bg-muted/30 p-3 font-mono text-xs leading-6">
+      <div
+        ref={box}
+        className="max-h-[420px] overflow-auto bg-muted/30 p-3 font-mono text-xs leading-6"
+      >
+        {logError && (
+          <p className="py-8 text-center font-sans text-destructive">
+            {logError}
+          </p>
+        )}
         {lines.length === 0 && (
           <p className="py-8 text-center font-sans text-muted-foreground">
             没有匹配 “{q}” 的日志
@@ -413,7 +442,8 @@ export function ServiceDetailPage() {
 function Detail({ s }: { s: Service }) {
   const { run, restart, restarting, setConfirm, setEdit, dialogs, isNative } =
     useServiceActions(s)
-  const conflicts = portConflicts().filter((c) =>
+  const { services } = useStore()
+  const conflicts = portConflicts(services).filter((c) =>
     c.rows.some((r) => r.serviceId === s.id)
   )
   const running = s.status === "running"

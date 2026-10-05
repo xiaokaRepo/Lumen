@@ -66,11 +66,8 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { portConflicts } from "@/lib/ports"
 import { useStore } from "@/lib/store"
-import { host, portConflicts } from "@/mock/data"
-import { history, updates } from "@/mock/alerts"
-
-const firing = history.filter((e) => e.state === "firing").length
 
 const NAV = [
   {
@@ -83,13 +80,12 @@ const NAV = [
         to: "/updates",
         label: "镜像更新",
         icon: IconCloudDownload,
-        badge: updates.length,
       },
       {
         to: "/ports",
         label: "端口",
         icon: IconPlug,
-        badge: portConflicts().length,
+        badgeKey: "ports",
         danger: true,
       },
       { to: "/processes", label: "进程", icon: IconCpu },
@@ -97,7 +93,6 @@ const NAV = [
         to: "/alerts",
         label: "告警",
         icon: IconBell,
-        badge: firing,
         danger: true,
       },
     ],
@@ -128,6 +123,8 @@ const TITLES: Record<string, string> = {
 
 function AppSidebar() {
   const { pathname } = useLocation()
+  const { host, services } = useStore()
+  const portBadge = portConflicts(services).length
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -172,15 +169,9 @@ function AppSidebar() {
                           <span>{it.label}</span>
                         </NavLink>
                       </SidebarMenuButton>
-                      {"badge" in it && it.badge ? (
-                        <SidebarMenuBadge
-                          className={
-                            "danger" in it && it.danger
-                              ? "text-destructive"
-                              : undefined
-                          }
-                        >
-                          <span className="tabular">{it.badge}</span>
+                      {"badgeKey" in it && portBadge > 0 ? (
+                        <SidebarMenuBadge className="text-destructive">
+                          <span className="tabular">{portBadge}</span>
                         </SidebarMenuBadge>
                       ) : null}
                     </SidebarMenuItem>
@@ -322,7 +313,7 @@ function ThemeMenu() {
 }
 
 function UserMenu() {
-  const { setAuthed } = useStore()
+  const { logout } = useStore()
   const nav = useNavigate()
   return (
     <DropdownMenu>
@@ -345,8 +336,7 @@ function UserMenu() {
         <DropdownMenuItem
           variant="destructive"
           onSelect={() => {
-            setAuthed(false)
-            nav("/login")
+            void logout().then(() => nav("/login"))
           }}
         >
           <IconLogout />
@@ -375,11 +365,8 @@ export function AppShell() {
           <div className="ml-auto flex items-center gap-1.5">
             <CommandMenu />
             <Button variant="ghost" size="icon" asChild aria-label="告警">
-              <Link to="/alerts" className="relative">
+              <Link to="/alerts">
                 <IconBell />
-                {firing > 0 && (
-                  <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-destructive" />
-                )}
               </Link>
             </Button>
             <ThemeMenu />
