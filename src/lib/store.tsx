@@ -2,7 +2,9 @@ import * as React from "react"
 
 import {
   api,
+  DEFAULT_CARD_FIELDS,
   EMPTY_HOST,
+  type CardFields,
   type HostInfo,
   type ServiceMetaBody,
   type UpdateRow,
@@ -47,6 +49,8 @@ interface Store {
   ) => Promise<void>
   homeOrder: string[]
   setHomeOrder: (ids: string[]) => void
+  cardFields: CardFields
+  setCardFields: (fields: CardFields) => void
   updates: UpdateRow[]
   updateChecked: string
   updateError: string
@@ -87,6 +91,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     {}
   )
   const [homeOrder, setHomeOrderState] = React.useState<string[]>([])
+  const [cardFields, setCardFieldsState] =
+    React.useState<CardFields>(DEFAULT_CARD_FIELDS)
   const [updates, setUpdates] = React.useState<UpdateRow[]>([])
   const [updateChecked, setUpdateChecked] = React.useState("")
   const [updateError, setUpdateError] = React.useState("")
@@ -123,6 +129,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const added = ids.filter((id) => !kept.includes(id))
       return [...kept, ...added]
     })
+    if (snap.cardFields) setCardFieldsState(snap.cardFields)
   }, [applyHost])
 
   const loadUpdates = React.useCallback(async () => {
@@ -192,6 +199,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setHomeOrderState(ids)
         void api.saveHome(ids)
       },
+      cardFields,
+      setCardFields: (fields) => {
+        setCardFieldsState(fields)
+        void api.saveCardFields(fields)
+      },
       checkUpdates: async () => {
         const d = await api.checkUpdates()
         setUpdates(d.updates ?? [])
@@ -257,6 +269,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dockerError,
       systemdNote,
       homeOrder,
+      cardFields,
       updates,
       updateChecked,
       updateError,

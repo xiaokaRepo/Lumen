@@ -35,6 +35,7 @@ type Meta struct {
 type SleepRec struct {
 	Asleep    bool   `json:"asleep"`
 	Since     string `json:"since,omitempty"`
+	SinceUnix int64  `json:"sinceUnix,omitempty"`
 	HostPort  int    `json:"hostPort,omitempty"`
 	ContPort  int    `json:"contPort,omitempty"`
 	Proto     string `json:"proto,omitempty"`
@@ -110,6 +111,7 @@ type fileState struct {
 	Sessions      []remembered        `json:"sessions"`
 	Meta          map[string]Meta     `json:"meta"`
 	HomeOrder     []string            `json:"homeOrder,omitempty"`
+	CardFields    *CardFields         `json:"cardFields,omitempty"`
 	Channels      []Channel           `json:"channels,omitempty"`
 	Rules         []AlertRule         `json:"rules,omitempty"`
 	Events        []AlertEvent        `json:"events,omitempty"`

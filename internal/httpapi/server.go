@@ -182,6 +182,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 		"dockerError": errText,
 		"systemdNote": note,
 		"homeOrder":   s.Store.HomeOrder(),
+		"cardFields":  s.Store.CardFields(),
 	})
 }
 
@@ -613,20 +614,26 @@ func (s *Server) checkUpdates(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) putHome(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		IDs []string `json:"ids"`
+		IDs        []string          `json:"ids"`
+		CardFields *store.CardFields `json:"cardFields"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeErr(w, http.StatusBadRequest, "无法读取请求")
 		return
 	}
-	if body.IDs == nil {
-		body.IDs = []string{}
+	if body.IDs != nil {
+		if err := s.Store.SetHomeOrder(body.IDs); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
-	if err := s.Store.SetHomeOrder(body.IDs); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+	if body.CardFields != nil {
+		if err := s.Store.SetCardFields(*body.CardFields); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cardFields": s.Store.CardFields()})
 }
 
 func atoi(s string) int {

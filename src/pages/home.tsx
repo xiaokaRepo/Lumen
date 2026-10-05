@@ -34,6 +34,7 @@ import { NumberRoll } from "@/components/number-roll"
 import { EmptyState } from "@/components/page-states"
 import { ServiceIcon } from "@/components/service-icon"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   InputGroup,
   InputGroupAddon,
@@ -45,21 +46,24 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import type { CardFields } from "@/lib/api"
 import { groupNames } from "@/lib/ports"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { GROUPS, type Service } from "@/mock/data"
 
-const STATUS_TEXT: Record<Service["status"], string> = {
-  running: "",
-  paused: "已暂停",
-  exited: "已停止",
-  restarting: "重启中",
+function cardTone(s: Service): { label: string; tone: "ok" | "sleep" | "bad" } {
+  if (s.sleeping) return { label: "休眠中", tone: "sleep" }
+  if (s.status === "running" && s.health !== "unhealthy")
+    return { label: "运行", tone: "ok" }
+  return { label: "异常", tone: "bad" }
 }
 
 function Tile({
   s,
   editing,
+  fields,
+  hasUpdate,
   onEdit,
   onToggleHide,
   index,
@@ -67,6 +71,8 @@ function Tile({
 }: {
   s: Service
   editing: boolean
+  fields: CardFields
+  hasUpdate: boolean
   onEdit: () => void
   onToggleHide: () => void
   index: number
@@ -80,9 +86,11 @@ function Tile({
     transition,
     isDragging,
   } = useSortable({ id: s.id, disabled: !editing })
-  const sleeping = !!s.sleeping
-  const down = !sleeping && (s.status !== "running" || s.health === "unhealthy")
+  const tone = cardTone(s)
   const hostLabel = s.webUrl?.replace(/^https?:\/\//, "")
+  const duration = s.sleeping
+    ? `休眠 ${s.sleepFor || "刚刚"}`
+    : s.uptime
 
   const body = (
     <>
@@ -94,15 +102,21 @@ function Tile({
         layoutId={editing ? undefined : `icon-${s.id}`}
         className={cn(
           "transition-transform duration-200 ease-out group-hover:scale-105",
-          down && !editing && "opacity-60 grayscale"
+          tone.tone === "bad" && !editing && "opacity-60 grayscale"
         )}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <motion.span
           layoutId={editing ? undefined : `name-${s.id}`}
-          className="truncate font-medium"
+          className="flex min-w-0 items-center gap-1.5 font-medium"
         >
-          {s.displayName}
+          <span className="truncate">{s.displayName}</span>
+          {fields.update && hasUpdate && (
+            <span
+              className="size-1.5 shrink-0 rounded-full bg-foreground"
+              aria-label="有新镜像"
+            />
+          )}
         </motion.span>
         {s.description && !editing ? (
           <span className="truncate text-xs text-muted-foreground">
@@ -113,24 +127,35 @@ function Tile({
             {hostLabel}
           </span>
         )}
-        {sleeping && (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {fields.status && (
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-xs",
+              tone.tone === "bad"
+                ? "text-destructive"
+                : "text-muted-foreground"
+            )}
+          >
             <span
-              className="size-1.5 rounded-full bg-muted-foreground"
+              className={cn(
+                "size-1.5 rounded-full",
+                tone.tone === "bad" && "bg-destructive lumen-pulse-once",
+                tone.tone === "sleep" && "bg-muted-foreground",
+                tone.tone === "ok" && "bg-success"
+              )}
               aria-hidden
             />
-            休眠中
+            {tone.label}
           </span>
         )}
-        {down && (
-          <span className="flex items-center gap-1.5 text-xs text-destructive">
-            <span
-              className="lumen-pulse-once size-1.5 rounded-full bg-destructive"
-              aria-hidden
-            />
-            {s.health === "unhealthy" && s.status === "running"
-              ? "不健康"
-              : STATUS_TEXT[s.status]}
+        {fields.usage && (
+          <span className="tabular truncate text-xs text-muted-foreground">
+            CPU {s.cpu}% · {Math.round(s.memMB)} MB
+          </span>
+        )}
+        {fields.uptime && duration && (
+          <span className="tabular truncate text-xs text-muted-foreground">
+            {duration}
           </span>
         )}
       </span>
@@ -209,7 +234,16 @@ function Tile({
 }
 
 export function HomePage() {
-  const { services, homeOrder, setHomeOrder, updateMeta, host } = useStore()
+  const {
+    services,
+    homeOrder,
+    setHomeOrder,
+    cardFields,
+    setCardFields,
+    updates,
+    updateMeta,
+    host,
+  } = useStore()
   const enter = useEnterOnce("home")
   const [editing, setEditing] = React.useState(false)
   const [q, setQ] = React.useState("")
@@ -331,7 +365,7 @@ export function HomePage() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                拖动排序、隐藏卡片、修改图标和名称
+                拖动排序、选择卡片字段、隐藏卡片
               </TooltipContent>
             </Tooltip>
           )}
@@ -339,9 +373,31 @@ export function HomePage() {
       </div>
 
       {editing && (
-        <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-          拖动左侧把手调整顺序，也可以用键盘：聚焦把手后按空格拿起，方向键移动。改分组请点铅笔图标。
-        </p>
+        <div className="flex flex-col gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+          <p>
+            拖动左侧把手调整顺序，也可以用键盘：聚焦把手后按空格拿起，方向键移动。改分组请点铅笔图标。
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-foreground">
+            {(
+              [
+                ["status", "状态"],
+                ["usage", "CPU 和内存"],
+                ["uptime", "运行时长"],
+                ["update", "新镜像"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2">
+                <Checkbox
+                  checked={cardFields[key]}
+                  onCheckedChange={(v) =>
+                    setCardFields({ ...cardFields, [key]: !!v })
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
       )}
 
       {groups.length === 0 ? (
@@ -383,6 +439,10 @@ export function HomePage() {
                         key={s.id}
                         s={s}
                         editing={editing}
+                        fields={cardFields}
+                        hasUpdate={updates.some((u) =>
+                          u.serviceIds.includes(s.id)
+                        )}
                         index={visible.indexOf(s)}
                         enter={enter && !q}
                         onEdit={() => setEditTarget(s)}

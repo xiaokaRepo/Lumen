@@ -97,6 +97,7 @@ func (c *Ctl) Stop(ctx context.Context, id string) error {
 		if rec, ok := c.store.SleepRec(svc.Name); ok {
 			rec.Asleep = false
 			rec.Since = ""
+			rec.SinceUnix = 0
 			_ = c.store.PutSleep(svc.Name, rec)
 		}
 		c.closeProxy(svc.Name)
@@ -166,6 +167,7 @@ func (c *Ctl) Stack(ctx context.Context, project, action string) error {
 				if rec, ok := c.store.SleepRec(n); ok {
 					rec.Asleep = false
 					rec.Since = ""
+					rec.SinceUnix = 0
 					_ = c.store.PutSleep(n, rec)
 				}
 				c.closeProxy(n)
@@ -266,8 +268,10 @@ func (c *Ctl) plan(name string) error {
 		return errors.New("没有这个服务")
 	}
 	rec, _ := c.store.SleepRec(name)
+	now := time.Now()
 	rec.Asleep = true
-	rec.Since = time.Now().Format("01-02 15:04")
+	rec.Since = now.Format("01-02 15:04")
+	rec.SinceUnix = now.Unix()
 	rec.LastError = ""
 	if svc.WebURL != "" {
 		rec.WebURL = svc.WebURL
@@ -345,6 +349,7 @@ func (c *Ctl) wakeOne(ctx context.Context, name string) error {
 	if brief.Running {
 		rec.Asleep = false
 		rec.Since = ""
+		rec.SinceUnix = 0
 		rec.LastError = ""
 		if err := c.saveAwake(name, rec); err != nil {
 			return err
@@ -381,6 +386,7 @@ func (c *Ctl) wakeOne(ctx context.Context, name string) error {
 	if err := c.waitUp(ctx, name, rec); err != nil {
 		rec.Asleep = false
 		rec.Since = ""
+		rec.SinceUnix = 0
 		rec.LastError = err.Error()
 		_ = c.saveAwake(name, rec)
 		_ = c.attach(ctx, name)
@@ -388,6 +394,7 @@ func (c *Ctl) wakeOne(ctx context.Context, name string) error {
 	}
 	rec.Asleep = false
 	rec.Since = ""
+	rec.SinceUnix = 0
 	rec.LastError = ""
 	if err := c.saveAwake(name, rec); err != nil {
 		return err

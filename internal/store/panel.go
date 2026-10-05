@@ -23,6 +23,34 @@ func (s *Store) SetHomeOrder(ids []string) error {
 	return s.saveLocked()
 }
 
+// CardFields is which extra lines a homepage card shows. A missing value means all on.
+type CardFields struct {
+	Status bool `json:"status"`
+	Usage  bool `json:"usage"`
+	Uptime bool `json:"uptime"`
+	Update bool `json:"update"`
+}
+
+func DefaultCardFields() CardFields {
+	return CardFields{Status: true, Usage: true, Uptime: true, Update: true}
+}
+
+func (s *Store) CardFields() CardFields {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state.CardFields == nil {
+		return DefaultCardFields()
+	}
+	return *s.state.CardFields
+}
+
+func (s *Store) SetCardFields(f CardFields) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.state.CardFields = &f
+	return s.saveLocked()
+}
+
 func (s *Store) Channels() []Channel {
 	s.mu.Lock()
 	defer s.mu.Unlock()

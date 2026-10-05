@@ -74,6 +74,7 @@ type Service struct {
 	LastError     string         `json:"lastError,omitempty"`
 	HideOnHome    bool           `json:"hideOnHome,omitempty"`
 	Sleeping      bool           `json:"sleeping,omitempty"`
+	SleepFor      string         `json:"sleepFor,omitempty"`
 	IdleSleep     bool           `json:"idleSleep,omitempty"`
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -28,6 +29,9 @@ type Brief struct {
 
 func applySleep(svc *Service, rec store.SleepRec) {
 	svc.Sleeping = rec.Asleep
+	if rec.Asleep {
+		svc.SleepFor = formatSince(rec.SinceUnix)
+	}
 	if rec.LastError != "" {
 		svc.LastError = rec.LastError
 	}
@@ -264,6 +268,25 @@ func (m *Manager) HostPorts(ctx context.Context, name string) ([]PortBinding, er
 		return nil, err
 	}
 	return portsOf(&info), nil
+}
+
+func formatSince(unix int64) string {
+	if unix <= 0 {
+		return ""
+	}
+	d := time.Since(time.Unix(unix, 0))
+	if d < time.Minute {
+		return "刚刚"
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	if days > 0 {
+		return itoa(days) + " 天 " + itoa(hours) + " 小时"
+	}
+	if hours > 0 {
+		return itoa(hours) + " 小时"
+	}
+	return itoa(int(d.Minutes())) + " 分钟"
 }
 
 func stoppedOK(err error) bool {
