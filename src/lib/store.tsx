@@ -11,6 +11,7 @@ import {
 } from "@/lib/api"
 import type { SamplePoint } from "@/lib/live-sample"
 import type { IconRef } from "@/lib/icons"
+import { asList, normalizeServices } from "@/lib/snapshot"
 import type { Service, ServiceStatus } from "@/mock/data"
 
 export interface ServiceMeta {
@@ -104,8 +105,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const next = {
       ...EMPTY_HOST,
       ...h,
-      disks: h?.disks ?? [],
-      load: h?.load?.length ? h.load : [0, 0, 0],
+      disks: asList(h?.disks),
+      load: asList(h?.load).length ? asList(h?.load) : [0, 0, 0],
     }
     setHost(next)
     const disk = next.disks[0]
@@ -126,7 +127,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const refresh = React.useCallback(async () => {
     const snap = await api.snapshot()
     applyHost(snap.host)
-    setServices(snap.services)
+    setServices(normalizeServices(snap.services))
     setDockerError(snap.dockerError || "")
     setSystemdNote(snap.systemdNote || "")
     setError(snap.dockerError ? "Docker 不可用：" + snap.dockerError : "")
@@ -144,7 +145,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const loadUpdates = React.useCallback(async () => {
     const d = await api.updates()
-    setUpdates(d.updates ?? [])
+    setUpdates(
+      asList(d.updates).map((u) => ({ ...u, serviceIds: asList(u.serviceIds) }))
+    )
     setUpdateChecked(d.checkedAt || "")
     setUpdateError(d.error || "")
   }, [])
@@ -217,7 +220,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       checkUpdates: async () => {
         const d = await api.checkUpdates()
-        setUpdates(d.updates ?? [])
+        setUpdates(
+          asList(d.updates).map((u) => ({
+            ...u,
+            serviceIds: asList(u.serviceIds),
+          }))
+        )
         setUpdateChecked(d.checkedAt || "")
         setUpdateError(d.error || "")
       },

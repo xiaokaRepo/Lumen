@@ -1,3 +1,4 @@
+import { asList } from "@/lib/snapshot"
 import type { PortBinding, Proto, Service } from "@/mock/data"
 
 export interface PortRow {
@@ -15,7 +16,7 @@ export function allPorts(services: Service[]): PortRow[] {
   for (const s of services) {
     const bound =
       (s.status === "running" || s.status === "paused") && !s.sleeping
-    for (const p of s.ports) {
+    for (const p of asList(s.ports)) {
       rows.push(rowFrom(s.id, p, bound, !!p.proxy))
     }
   }

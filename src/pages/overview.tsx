@@ -142,7 +142,7 @@ export function OverviewPage() {
             spark={series.mem}
           />
           <Metric
-            label={`存储 ${disk.mount}`}
+            label={disk ? `存储 ${disk.mount}` : "存储"}
             value={
               disk ? (
                 <>
