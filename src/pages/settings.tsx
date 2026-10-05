@@ -86,40 +86,85 @@ function SwitchRow({
   )
 }
 
-function ChangePassword() {
+function AccountForm() {
+  const { username, updateAccount } = useStore()
+  const [name, setName] = React.useState(username)
   const [cur, setCur] = React.useState("")
   const [next, setNext] = React.useState("")
   const [confirm, setConfirm] = React.useState("")
   const [tried, setTried] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  React.useEffect(() => {
+    setName(username)
+  }, [username])
   const errs = {
+    name: !name.trim()
+      ? "请填写用户名"
+      : Array.from(name.trim()).length > 32
+        ? "用户名最多 32 个字符"
+        : undefined,
     cur: !cur ? "请输入当前密码" : undefined,
-    next:
-      next.length < 10
+    next: next
+      ? next.length < 10
         ? "新密码至少 10 位"
         : next === cur
           ? "新密码不能与当前密码相同"
-          : undefined,
-    confirm: confirm !== next ? "两次输入不一致" : undefined,
+          : undefined
+      : undefined,
+    confirm:
+      next || confirm
+        ? confirm !== next
+          ? "两次输入不一致"
+          : undefined
+        : undefined,
   }
-  const ok = !errs.cur && !errs.next && !errs.confirm
+  const ok = !errs.name && !errs.cur && !errs.next && !errs.confirm
   return (
     <form
       className="flex flex-col gap-5 rounded-xl border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault()
         setTried(true)
-        if (!ok) return
-        toast.success("密码已修改", {
-          description: "其他设备上的会话已全部退出",
+        if (!ok || busy) return
+        setBusy(true)
+        void updateAccount({
+          currentPassword: cur,
+          username: name.trim(),
+          newPassword: next || undefined,
         })
-        setCur("")
-        setNext("")
-        setConfirm("")
-        setTried(false)
+          .then(() => {
+            toast.success(next ? "账号已更新" : "用户名已更新", {
+              description: next ? "其他设备需要重新登录" : undefined,
+            })
+            setCur("")
+            setNext("")
+            setConfirm("")
+            setTried(false)
+          })
+          .catch((err: Error) => {
+            toast.error(err.message || "没有保存")
+          })
+          .finally(() => setBusy(false))
       }}
       noValidate
     >
-      <h3 className="text-sm font-medium">修改密码</h3>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium">账号</h3>
+        <p className="text-sm text-muted-foreground">
+          登录只需要密码。用户名显示在右上角。
+        </p>
+      </div>
+      <Field data-invalid={tried && !!errs.name}>
+        <FieldLabel htmlFor="account-name">用户名</FieldLabel>
+        <Input
+          id="account-name"
+          autoComplete="username"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-invalid={tried && !!errs.name}
+        />
+        {tried && errs.name && <FieldError>{errs.name}</FieldError>}
+      </Field>
       <Field data-invalid={tried && !!errs.cur}>
         <FieldLabel htmlFor="cur-pw">当前密码</FieldLabel>
         <Input
@@ -146,7 +191,7 @@ function ChangePassword() {
           <FieldError>{errs.next}</FieldError>
         ) : (
           <FieldDescription>
-            至少 10 位。修改后其他设备需要重新登录。
+            留空则不修改。至少 10 位。修改后其他设备需要重新登录。
           </FieldDescription>
         )}
       </Field>
@@ -163,7 +208,9 @@ function ChangePassword() {
         {tried && errs.confirm && <FieldError>{errs.confirm}</FieldError>}
       </Field>
       <div className="flex justify-end">
-        <Button type="submit">修改密码</Button>
+        <Button type="submit" disabled={busy}>
+          保存
+        </Button>
       </div>
     </form>
   )
@@ -388,7 +435,7 @@ export function SettingsPage() {
             description="Lumen 能控制所有容器和主机进程，请保护好访问入口。"
           >
             <div className="flex flex-col gap-6">
-              <ChangePassword />
+              <AccountForm />
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="timeout">无操作自动退出</FieldLabel>

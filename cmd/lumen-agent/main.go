@@ -31,7 +31,7 @@ func main() {
 		log.Fatal(err)
 	}
 	host := hoststat.New()
-	docker, err := dockermgr.New(st, func() string { return host.Current().IP })
+	docker, err := dockermgr.New(st, func() string { return host.OpenAddr() })
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -128,7 +128,8 @@ export function LoginPage() {
               {setup ? "设置管理员密码" : "登录 Lumen"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {host.model || "主机"} <span className="tabular">{host.ip}</span>
+              {host.model || "主机"}{" "}
+              <span className="tabular">{host.ip || host.name}</span>
             </p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { IconExternalLink } from "@tabler/icons-react"
 
+import { badOpenHost, currentOpenHost } from "@/lib/open-url"
 import { cn } from "@/lib/utils"
 import type { PortBinding, Service, ServiceStatus } from "@/mock/data"
 import {
@@ -89,13 +90,10 @@ export function StatusLabel({
 }
 
 export function portHref(p: PortBinding) {
-  const ip =
-    p.ip && p.ip !== "0.0.0.0" && p.ip !== "::"
-      ? p.ip
-      : window.location.hostname
+  const published = p.ip && !badOpenHost(p.ip) ? p.ip : currentOpenHost()
   const scheme =
     p.host === 443 || p.host === 9443 || p.host === 8443 ? "https" : "http"
-  return `${scheme}://${ip}:${p.host}`
+  return `${scheme}://${published}:${p.host}`
 }
 
 export function PortChip({

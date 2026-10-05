@@ -52,6 +52,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/channels/{id}/test", s.authed(s.testChannel))
 	mux.HandleFunc("PUT /api/rules", s.authed(s.putRule))
 	mux.HandleFunc("PUT /api/home", s.authed(s.putHome))
+	mux.HandleFunc("POST /api/account", s.authed(s.account))
 	if s.Static != "" {
 		mux.Handle("/", s.spa())
 	}
@@ -67,10 +68,14 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	} else {
 		host = hoststat.Snapshot{Load: []float64{0, 0, 0}, Disks: []hoststat.Disk{}}
 	}
+	authed := s.Store.Valid(cookieToken(r))
 	body := map[string]any{
 		"setupRequired": s.Store.SetupRequired(),
-		"authed":        s.Store.Valid(cookieToken(r)),
+		"authed":        authed,
 		"host":          host,
+	}
+	if authed {
+		body["username"] = s.Store.Username()
 	}
 	if ag, ok := s.Store.ActiveAgent(); ok {
 		body["agentName"] = ag.Name
@@ -188,6 +193,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 		"systemdNote": note,
 		"homeOrder":   s.Store.HomeOrder(),
 		"cardFields":  s.Store.CardFields(),
+		"homeLayout":  s.Store.HomeLayout(),
 	})
 }
 
@@ -621,6 +627,7 @@ func (s *Server) putHome(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		IDs        []string          `json:"ids"`
 		CardFields *store.CardFields `json:"cardFields"`
+		Layout     *store.HomeLayout `json:"layout"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeErr(w, http.StatusBadRequest, "无法读取请求")
@@ -638,7 +645,34 @@ func (s *Server) putHome(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cardFields": s.Store.CardFields()})
+	if body.Layout != nil {
+		if _, err := s.Store.SetHomeLayout(*body.Layout); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"cardFields": s.Store.CardFields(),
+		"homeLayout": s.Store.HomeLayout(),
+	})
+}
+
+func (s *Server) account(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CurrentPassword string `json:"currentPassword"`
+		Username        string `json:"username"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if err := s.Store.UpdateAccount(cookieToken(r), body.CurrentPassword, body.Username, body.NewPassword); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "username": s.Store.Username()})
 }
 
 func atoi(s string) int {

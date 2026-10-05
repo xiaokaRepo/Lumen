@@ -108,21 +108,24 @@ type UpdateRow struct {
 }
 
 type fileState struct {
-	PasswordHash  string              `json:"passwordHash"`
-	Sessions      []remembered        `json:"sessions"`
-	Meta          map[string]Meta     `json:"meta"`
-	HomeOrder     []string            `json:"homeOrder,omitempty"`
-	HomeOrders    map[string][]string `json:"homeOrders,omitempty"`
-	CardFields    *CardFields         `json:"cardFields,omitempty"`
-	Agents        []Agent             `json:"agents,omitempty"`
-	ActiveAgent   string              `json:"activeAgent,omitempty"`
-	Channels      []Channel           `json:"channels,omitempty"`
-	Rules         []AlertRule         `json:"rules,omitempty"`
-	Events        []AlertEvent        `json:"events,omitempty"`
-	Updates       []UpdateRow         `json:"updates,omitempty"`
-	UpdateChecked string              `json:"updateChecked,omitempty"`
-	UpdateError   string              `json:"updateError,omitempty"`
-	Sleep         map[string]SleepRec `json:"sleep,omitempty"`
+	PasswordHash  string                `json:"passwordHash"`
+	Username      string                `json:"username,omitempty"`
+	Sessions      []remembered          `json:"sessions"`
+	Meta          map[string]Meta       `json:"meta"`
+	HomeOrder     []string              `json:"homeOrder,omitempty"`
+	HomeOrders    map[string][]string   `json:"homeOrders,omitempty"`
+	HomeLayout    *HomeLayout           `json:"homeLayout,omitempty"`
+	HomeLayouts   map[string]HomeLayout `json:"homeLayouts,omitempty"`
+	CardFields    *CardFields           `json:"cardFields,omitempty"`
+	Agents        []Agent               `json:"agents,omitempty"`
+	ActiveAgent   string                `json:"activeAgent,omitempty"`
+	Channels      []Channel             `json:"channels,omitempty"`
+	Rules         []AlertRule           `json:"rules,omitempty"`
+	Events        []AlertEvent          `json:"events,omitempty"`
+	Updates       []UpdateRow           `json:"updates,omitempty"`
+	UpdateChecked string                `json:"updateChecked,omitempty"`
+	UpdateError   string                `json:"updateError,omitempty"`
+	Sleep         map[string]SleepRec   `json:"sleep,omitempty"`
 }
 
 type Session struct {

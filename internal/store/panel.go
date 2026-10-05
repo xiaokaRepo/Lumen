@@ -66,6 +66,131 @@ func (s *Store) SetCardFields(f CardFields) error {
 	return s.saveLocked()
 }
 
+const UngroupedID = "ungrouped"
+
+// HomeGroup is one homepage section. The ungrouped group cannot be removed.
+type HomeGroup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// HomeLayout is the homepage grouping and card width for one agent.
+type HomeLayout struct {
+	Groups []HomeGroup         `json:"groups"`
+	Order  map[string][]string `json:"order"`
+	Span   map[string]int      `json:"span"`
+}
+
+func DefaultHomeLayout() HomeLayout {
+	return NormalizeLayout(HomeLayout{})
+}
+
+func (s *Store) HomeLayout() HomeLayout {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.layoutLocked()
+}
+
+func (s *Store) layoutLocked() HomeLayout {
+	var raw HomeLayout
+	if id := s.state.ActiveAgent; id != "" {
+		if s.state.HomeLayouts != nil {
+			raw = s.state.HomeLayouts[id]
+		}
+	} else if s.state.HomeLayout != nil {
+		raw = *s.state.HomeLayout
+	}
+	return NormalizeLayout(raw)
+}
+
+func (s *Store) SetHomeLayout(in HomeLayout) (HomeLayout, error) {
+	next := NormalizeLayout(in)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id := s.state.ActiveAgent; id != "" {
+		if s.state.HomeLayouts == nil {
+			s.state.HomeLayouts = map[string]HomeLayout{}
+		}
+		s.state.HomeLayouts[id] = next
+	} else {
+		s.state.HomeLayout = &next
+	}
+	if err := s.saveLocked(); err != nil {
+		return HomeLayout{}, err
+	}
+	return next, nil
+}
+
+func NormalizeLayout(in HomeLayout) HomeLayout {
+	groups := []HomeGroup{{ID: UngroupedID, Name: "未分组"}}
+	seen := map[string]bool{UngroupedID: true}
+	names := map[string]bool{"未分组": true}
+	for _, g := range in.Groups {
+		id := strings.TrimSpace(g.ID)
+		name := strings.TrimSpace(g.Name)
+		if id == "" || id == UngroupedID || seen[id] || name == "" || names[name] {
+			continue
+		}
+		if utf8Len(name) > 24 {
+			name = trimRunes(name, 24)
+		}
+		seen[id] = true
+		names[name] = true
+		groups = append(groups, HomeGroup{ID: id, Name: name})
+	}
+	order := map[string][]string{}
+	used := map[string]bool{}
+	for _, g := range groups {
+		var ids []string
+		for _, id := range in.Order[g.ID] {
+			id = strings.TrimSpace(id)
+			if id == "" || used[id] {
+				continue
+			}
+			used[id] = true
+			ids = append(ids, id)
+		}
+		if ids == nil {
+			ids = []string{}
+		}
+		order[g.ID] = ids
+	}
+	span := map[string]int{}
+	for id, n := range in.Span {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if n < 1 {
+			n = 1
+		}
+		if n > 3 {
+			n = 3
+		}
+		span[id] = n
+	}
+	return HomeLayout{Groups: groups, Order: order, Span: span}
+}
+
+func utf8Len(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
+}
+
+func trimRunes(s string, n int) string {
+	i := 0
+	for idx := range s {
+		if i == n {
+			return s[:idx]
+		}
+		i++
+	}
+	return s
+}
+
 func (s *Store) Channels() []Channel {
 	s.mu.Lock()
 	defer s.mu.Unlock()

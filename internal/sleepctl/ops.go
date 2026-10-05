@@ -454,6 +454,9 @@ func (c *Ctl) waitUp(ctx context.Context, name string, rec store.SleepRec) error
 	}
 }
 
+// dialAddr reaches the container after it wakes. The address people open is
+// the host LAN IP or hostname plus the published port. Dialing that address
+// would loop back into this proxy, so the upstream stays the container IP.
 func dialAddr(brief dockermgr.Brief, rec store.SleepRec) string {
 	if rec.Adopted {
 		if brief.IP == "" || rec.ContPort <= 0 {

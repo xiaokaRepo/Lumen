@@ -1,3 +1,4 @@
+import type { HomeLayout } from "@/lib/home-layout"
 import type { IconRef } from "@/lib/icons"
 import type { Service } from "@/mock/data"
 
@@ -71,9 +72,12 @@ async function parse<T>(res: Response): Promise<T> {
 
 export const api = {
   session: async () =>
-    parse<{ setupRequired: boolean; authed: boolean; host: HostInfo }>(
-      await fetch("/api/session", { credentials: "include" })
-    ),
+    parse<{
+      setupRequired: boolean
+      authed: boolean
+      host: HostInfo
+      username?: string
+    }>(await fetch("/api/session", { credentials: "include" })),
   setup: async (password: string) =>
     parse<{ ok: boolean }>(
       await fetch("/api/setup", {
@@ -104,6 +108,7 @@ export const api = {
       systemdNote?: string
       homeOrder?: string[]
       cardFields?: CardFields
+      homeLayout?: HomeLayout
       onLan?: boolean
     }>(await fetch("/api/snapshot", { credentials: "include" })),
   logs: async (id: string) =>
@@ -295,6 +300,28 @@ export const api = {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardFields }),
+      })
+    ),
+  saveHomeLayout: async (layout: HomeLayout) =>
+    parse<{ ok: boolean; homeLayout: HomeLayout }>(
+      await fetch("/api/home", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout }),
+      })
+    ),
+  updateAccount: async (body: {
+    currentPassword: string
+    username: string
+    newPassword?: string
+  }) =>
+    parse<{ ok: boolean; username: string }>(
+      await fetch("/api/account", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       })
     ),
   hosts: async () =>

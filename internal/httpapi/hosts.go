@@ -131,6 +131,7 @@ func (s *Server) snapshotRemote(w http.ResponseWriter, r *http.Request) {
 			"dockerError": msg,
 			"homeOrder":   s.Store.HomeOrder(),
 			"cardFields":  s.Store.CardFields(),
+			"homeLayout":  s.Store.HomeLayout(),
 			"onLan":       ViewerOnLAN(r.Host),
 		})
 	}
@@ -161,6 +162,7 @@ func (s *Server) snapshotRemote(w http.ResponseWriter, r *http.Request) {
 	}
 	payload["homeOrder"] = s.Store.HomeOrder()
 	payload["cardFields"] = s.Store.CardFields()
+	payload["homeLayout"] = s.Store.HomeLayout()
 	payload["onLan"] = ViewerOnLAN(r.Host)
 	if ag, ok := s.Store.ActiveAgent(); ok {
 		payload["agent"] = map[string]any{"id": ag.ID, "name": ag.Name}

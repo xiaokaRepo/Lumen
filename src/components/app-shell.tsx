@@ -316,24 +316,25 @@ function ThemeMenu() {
 }
 
 function UserMenu() {
-  const { logout } = useStore()
+  const { logout, username } = useStore()
   const nav = useNavigate()
+  const letter = Array.from(username || "管")[0] || "管"
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-2">
           <span className="flex size-6 items-center justify-center rounded-md bg-muted text-xs font-medium">
-            管
+            {letter}
           </span>
-          <span className="hidden sm:inline">admin</span>
+          <span className="hidden sm:inline">{username}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
-          从 192.168.31.105 登录
+        <DropdownMenuLabel className="font-normal">
+          {username}
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => nav("/settings#security")}>
-          修改密码
+          账号设置
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
