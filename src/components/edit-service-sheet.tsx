@@ -54,7 +54,9 @@ export function EditServiceSheet({
     service.iconOverride
   )
   const [showHome, setShowHome] = React.useState(!service.hideOnHome)
+  const [idle, setIdle] = React.useState(!!service.idleSleep)
   const [picker, setPicker] = React.useState(false)
+  const canIdle = service.kind === "container" || service.kind === "compose"
 
   const webPorts = service.ports.filter((p) => p.proto === "tcp")
   const nameError = name.trim() === "" ? "显示名称不能为空" : undefined
@@ -68,6 +70,7 @@ export function EditServiceSheet({
       description: desc,
       iconOverride: icon,
       hideOnHome: !showHome,
+      idleSleep: canIdle ? idle : false,
     })
       .then(() => {
         toast.success("已保存", {
@@ -218,6 +221,24 @@ export function EditServiceSheet({
                 onCheckedChange={setShowHome}
               />
             </Field>
+
+            {canIdle && (
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="svc-idle">空闲时休眠</FieldLabel>
+                  <FieldDescription>
+                    默认关闭。连续 30 分钟 CPU 低于整机的 2%，且收发都低于 32
+                    KB/s，才会停止并释放内存。
+                    {service.stack ? " 打开后整个 compose 栈一起休眠。" : ""}
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="svc-idle"
+                  checked={idle}
+                  onCheckedChange={setIdle}
+                />
+              </Field>
+            )}
           </FieldGroup>
         </div>
 

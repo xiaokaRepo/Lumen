@@ -15,6 +15,7 @@ import (
 	"github.com/xiaokaRepo/lumen/internal/imgupd"
 	"github.com/xiaokaRepo/lumen/internal/metrics"
 	"github.com/xiaokaRepo/lumen/internal/notify"
+	"github.com/xiaokaRepo/lumen/internal/sleepctl"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
@@ -39,13 +40,17 @@ func main() {
 	}
 	history := metrics.Open(filepath.Join(data, "metrics.json"))
 	go sampleHistory(history, host, docker)
-	go watch(st, host, docker, alerteng.New())
+	eng := alerteng.New()
+	go watch(st, host, docker, eng)
+	slp := sleepctl.New(st, docker, history, eng)
+	go slp.Run()
 	srv := &httpapi.Server{
 		Store:   st,
 		Host:    host,
 		Docker:  docker,
 		History: history,
 		Static:  os.Getenv("LUMEN_STATIC"),
+		Sleep:   slp,
 	}
 	httpSrv := &http.Server{
 		Addr:              addr,
@@ -96,7 +101,7 @@ func sampleHistory(h *metrics.History, host *hoststat.Sampler, docker *dockermgr
 		h.Flush()
 	}
 	take()
-	t := time.NewTicker(15 * time.Second)
+	t := time.NewTicker(metrics.SampleEvery)
 	defer t.Stop()
 	for range t.C {
 		take()

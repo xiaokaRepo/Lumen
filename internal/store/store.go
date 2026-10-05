@@ -27,6 +27,21 @@ type Meta struct {
 	Description  string   `json:"description,omitempty"`
 	IconOverride *IconRef `json:"iconOverride,omitempty"`
 	HideOnHome   bool     `json:"hideOnHome,omitempty"`
+	IdleSleep    bool     `json:"idleSleep,omitempty"`
+}
+
+// SleepRec is the persisted sleep intent for one container. Adopted means
+// Lumen owns the web port and Docker no longer publishes it.
+type SleepRec struct {
+	Asleep    bool   `json:"asleep"`
+	Since     string `json:"since,omitempty"`
+	HostPort  int    `json:"hostPort,omitempty"`
+	ContPort  int    `json:"contPort,omitempty"`
+	Proto     string `json:"proto,omitempty"`
+	BindIP    string `json:"bindIP,omitempty"`
+	Adopted   bool   `json:"adopted,omitempty"`
+	WebURL    string `json:"webUrl,omitempty"`
+	LastError string `json:"lastError,omitempty"`
 }
 
 type remembered struct {
@@ -91,16 +106,17 @@ type UpdateRow struct {
 }
 
 type fileState struct {
-	PasswordHash  string          `json:"passwordHash"`
-	Sessions      []remembered    `json:"sessions"`
-	Meta          map[string]Meta `json:"meta"`
-	HomeOrder     []string        `json:"homeOrder,omitempty"`
-	Channels      []Channel       `json:"channels,omitempty"`
-	Rules         []AlertRule     `json:"rules,omitempty"`
-	Events        []AlertEvent    `json:"events,omitempty"`
-	Updates       []UpdateRow     `json:"updates,omitempty"`
-	UpdateChecked string          `json:"updateChecked,omitempty"`
-	UpdateError   string          `json:"updateError,omitempty"`
+	PasswordHash  string              `json:"passwordHash"`
+	Sessions      []remembered        `json:"sessions"`
+	Meta          map[string]Meta     `json:"meta"`
+	HomeOrder     []string            `json:"homeOrder,omitempty"`
+	Channels      []Channel           `json:"channels,omitempty"`
+	Rules         []AlertRule         `json:"rules,omitempty"`
+	Events        []AlertEvent        `json:"events,omitempty"`
+	Updates       []UpdateRow         `json:"updates,omitempty"`
+	UpdateChecked string              `json:"updateChecked,omitempty"`
+	UpdateError   string              `json:"updateError,omitempty"`
+	Sleep         map[string]SleepRec `json:"sleep,omitempty"`
 }
 
 type Session struct {
@@ -152,6 +168,9 @@ func Open(dir string) (*Store, error) {
 	}
 	if s.state.HomeOrder == nil {
 		s.state.HomeOrder = []string{}
+	}
+	if s.state.Sleep == nil {
+		s.state.Sleep = map[string]SleepRec{}
 	}
 	now := time.Now().Unix()
 	kept := s.state.Sessions[:0]

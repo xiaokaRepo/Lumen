@@ -76,11 +76,17 @@ func (e *Engine) Eval(now time.Time, rules []store.AlertRule, svcs []dockermgr.S
 		e.last[h.key] = now
 		out = append(out, Fire{Rule: h.rule, Key: h.key, Title: h.title, Detail: h.detail, Severity: h.severity})
 	}
+	asleep := sleepingIDs(svcs)
 	for key, on := range e.firing {
 		if !on {
 			continue
 		}
 		if _, ok := active[key]; ok {
+			continue
+		}
+		if sleepKey(key, asleep) {
+			delete(e.since, key)
+			delete(e.firing, key)
 			continue
 		}
 		rule := e.rules[key]
@@ -101,7 +107,7 @@ func conditions(r store.AlertRule, svcs []dockermgr.Service, host hoststat.Snaps
 	switch r.Kind {
 	case "service_down":
 		for _, s := range svcs {
-			if s.Kind == "systemd" || !matchService(r.Target, s) {
+			if s.Kind == "systemd" || s.Sleeping || !matchService(r.Target, s) {
 				continue
 			}
 			if s.Status == "exited" || s.Status == "restarting" {
@@ -113,6 +119,9 @@ func conditions(r store.AlertRule, svcs []dockermgr.Service, host hoststat.Snaps
 		}
 	case "unhealthy":
 		for _, s := range svcs {
+			if s.Sleeping {
+				continue
+			}
 			if matchService(r.Target, s) && s.Health == "unhealthy" {
 				out = append(out, hit{
 					key: r.ID + ":" + s.ID, rule: r, severity: "warning",
@@ -126,6 +135,9 @@ func conditions(r store.AlertRule, svcs []dockermgr.Service, host hoststat.Snaps
 		}
 		if !isHost(r.Target) {
 			for _, s := range svcs {
+				if s.Sleeping {
+					continue
+				}
 				if matchService(r.Target, s) && s.CPU >= r.Threshold {
 					out = append(out, hit{key: r.ID + ":" + s.ID, rule: r, severity: "warning", title: s.DisplayName + " CPU 过高"})
 				}
@@ -159,6 +171,38 @@ func conditions(r store.AlertRule, svcs []dockermgr.Service, host hoststat.Snaps
 		}
 	}
 	return out
+}
+
+func sleepingIDs(svcs []dockermgr.Service) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range svcs {
+		if s.Sleeping {
+			out[s.ID] = true
+		}
+	}
+	return out
+}
+
+func sleepKey(key string, sleeping map[string]bool) bool {
+	_, id, ok := strings.Cut(key, ":")
+	if !ok {
+		return false
+	}
+	return sleeping[id]
+}
+
+// Drop forgets firing state for a service without emitting a resolve.
+func (e *Engine) Drop(id string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	suffix := ":" + id
+	for key := range e.firing {
+		if strings.HasSuffix(key, suffix) {
+			delete(e.firing, key)
+			delete(e.since, key)
+			delete(e.last, key)
+		}
+	}
 }
 
 func isHost(t string) bool {

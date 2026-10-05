@@ -4,11 +4,13 @@ import {
   IconCloudDownload,
   IconDots,
   IconExternalLink,
+  IconMoon,
   IconPencil,
   IconPlayerPause,
   IconPlayerPlay,
   IconPlayerStop,
   IconRefresh,
+  IconSun,
   IconTrash,
 } from "@tabler/icons-react"
 
@@ -90,7 +92,11 @@ export function useServiceActions(s: Service) {
             ? "pause"
             : label === "恢复"
               ? "unpause"
-              : "start"
+              : label === "休眠"
+                ? "sleep"
+                : label === "唤醒"
+                  ? "wake"
+                  : "start"
     void perform(action, label, {
       removeVolumes: label === "删除" ? removeVolumes : false,
     })
@@ -261,12 +267,23 @@ export function ServiceActionsMenu({
               <IconPlayerStop />
               停止
             </DropdownMenuItem>
+          ) : s.sleeping ? (
+            <DropdownMenuItem onSelect={() => run("唤醒")}>
+              <IconSun />
+              唤醒
+            </DropdownMenuItem>
           ) : (
             <DropdownMenuItem
               onSelect={() => run(s.status === "paused" ? "恢复" : "启动")}
             >
               <IconPlayerPlay />
               {s.status === "paused" ? "恢复" : "启动"}
+            </DropdownMenuItem>
+          )}
+          {!isNative && !s.sleeping && s.status !== "paused" && (
+            <DropdownMenuItem onSelect={() => run("休眠")}>
+              <IconMoon />
+              休眠
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onSelect={() => restart()}>

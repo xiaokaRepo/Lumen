@@ -80,7 +80,8 @@ function Tile({
     transition,
     isDragging,
   } = useSortable({ id: s.id, disabled: !editing })
-  const down = s.status !== "running" || s.health === "unhealthy"
+  const sleeping = !!s.sleeping
+  const down = !sleeping && (s.status !== "running" || s.health === "unhealthy")
   const hostLabel = s.webUrl?.replace(/^https?:\/\//, "")
 
   const body = (
@@ -110,6 +111,15 @@ function Tile({
         ) : (
           <span className="tabular truncate text-xs text-muted-foreground">
             {hostLabel}
+          </span>
+        )}
+        {sleeping && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className="size-1.5 rounded-full bg-muted-foreground"
+              aria-hidden
+            />
+            休眠中
           </span>
         )}
         {down && (
