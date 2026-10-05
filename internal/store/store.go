@@ -34,10 +34,73 @@ type remembered struct {
 	Expires int64  `json:"expires"`
 }
 
+type Channel struct {
+	ID       string            `json:"id"`
+	Type     string            `json:"type"`
+	Name     string            `json:"name"`
+	Enabled  bool              `json:"enabled"`
+	Config   map[string]string `json:"config"`
+	LastTest *TestResult       `json:"lastTest,omitempty"`
+}
+
+type TestResult struct {
+	OK  bool   `json:"ok"`
+	At  string `json:"at"`
+	Msg string `json:"msg,omitempty"`
+}
+
+type AlertRule struct {
+	ID        string   `json:"id"`
+	Kind      string   `json:"kind"`
+	Name      string   `json:"name"`
+	Enabled   bool     `json:"enabled"`
+	Target    string   `json:"target"`
+	Threshold float64  `json:"threshold,omitempty"`
+	Duration  string   `json:"duration,omitempty"`
+	Channels  []string `json:"channels"`
+	Cooldown  string   `json:"cooldown"`
+	Resolve   bool     `json:"resolve,omitempty"`
+}
+
+type Sent struct {
+	Channel string `json:"channel"`
+	OK      bool   `json:"ok"`
+}
+
+type AlertEvent struct {
+	ID         string `json:"id"`
+	At         string `json:"at"`
+	RuleID     string `json:"ruleId"`
+	Severity   string `json:"severity"`
+	Title      string `json:"title"`
+	Detail     string `json:"detail"`
+	State      string `json:"state"`
+	ResolvedAt string `json:"resolvedAt,omitempty"`
+	Sent       []Sent `json:"sent"`
+}
+
+type UpdateRow struct {
+	ServiceIDs  []string `json:"serviceIds"`
+	Stack       string   `json:"stack,omitempty"`
+	Image       string   `json:"image"`
+	Current     string   `json:"current"`
+	Latest      string   `json:"latest"`
+	Published   string   `json:"published"`
+	SizeDeltaMB float64  `json:"sizeDeltaMB"`
+	Pinned      bool     `json:"pinned,omitempty"`
+}
+
 type fileState struct {
-	PasswordHash string          `json:"passwordHash"`
-	Sessions     []remembered    `json:"sessions"`
-	Meta         map[string]Meta `json:"meta"`
+	PasswordHash  string          `json:"passwordHash"`
+	Sessions      []remembered    `json:"sessions"`
+	Meta          map[string]Meta `json:"meta"`
+	HomeOrder     []string        `json:"homeOrder,omitempty"`
+	Channels      []Channel       `json:"channels,omitempty"`
+	Rules         []AlertRule     `json:"rules,omitempty"`
+	Events        []AlertEvent    `json:"events,omitempty"`
+	Updates       []UpdateRow     `json:"updates,omitempty"`
+	UpdateChecked string          `json:"updateChecked,omitempty"`
+	UpdateError   string          `json:"updateError,omitempty"`
 }
 
 type Session struct {
@@ -74,6 +137,21 @@ func Open(dir string) (*Store, error) {
 	}
 	if s.state.Meta == nil {
 		s.state.Meta = map[string]Meta{}
+	}
+	if s.state.Channels == nil {
+		s.state.Channels = []Channel{}
+	}
+	if s.state.Rules == nil {
+		s.state.Rules = []AlertRule{}
+	}
+	if s.state.Events == nil {
+		s.state.Events = []AlertEvent{}
+	}
+	if s.state.Updates == nil {
+		s.state.Updates = []UpdateRow{}
+	}
+	if s.state.HomeOrder == nil {
+		s.state.HomeOrder = []string{}
 	}
 	now := time.Now().Unix()
 	kept := s.state.Sessions[:0]

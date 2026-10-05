@@ -1,6 +1,12 @@
 import * as React from "react"
 
-import { api, EMPTY_HOST, type HostInfo, type ServiceMetaBody } from "@/lib/api"
+import {
+  api,
+  EMPTY_HOST,
+  type HostInfo,
+  type ServiceMetaBody,
+  type UpdateRow,
+} from "@/lib/api"
 import type { SamplePoint } from "@/lib/live-sample"
 import type { IconRef } from "@/lib/icons"
 import type { Service, ServiceStatus } from "@/mock/data"
@@ -40,6 +46,10 @@ interface Store {
   ) => Promise<void>
   homeOrder: string[]
   setHomeOrder: (ids: string[]) => void
+  updates: UpdateRow[]
+  updateChecked: string
+  updateError: string
+  checkUpdates: () => Promise<void>
   login: (password: string, remember: boolean) => Promise<void>
   setup: (password: string) => Promise<void>
   logout: () => Promise<void>
@@ -75,7 +85,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [overlay, setOverlay] = React.useState<Record<string, ServiceStatus>>(
     {}
   )
-  const [homeOrder, setHomeOrder] = React.useState<string[]>([])
+  const [homeOrder, setHomeOrderState] = React.useState<string[]>([])
+  const [updates, setUpdates] = React.useState<UpdateRow[]>([])
+  const [updateChecked, setUpdateChecked] = React.useState("")
+  const [updateError, setUpdateError] = React.useState("")
 
   const applyHost = React.useCallback((h: HostInfo) => {
     setHost(h)
@@ -101,13 +114,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setDockerError(snap.dockerError || "")
     setSystemdNote(snap.systemdNote || "")
     setError(snap.dockerError ? "Docker 不可用：" + snap.dockerError : "")
-    setHomeOrder((prev) => {
+    setHomeOrderState((prev) => {
+      const saved = snap.homeOrder ?? []
+      const base = saved.length ? saved : prev
       const ids = snap.services.map((s) => s.id)
-      const kept = prev.filter((id) => ids.includes(id))
+      const kept = base.filter((id) => ids.includes(id))
       const added = ids.filter((id) => !kept.includes(id))
       return [...kept, ...added]
     })
   }, [applyHost])
+
+  const loadUpdates = React.useCallback(async () => {
+    const d = await api.updates()
+    setUpdates(d.updates ?? [])
+    setUpdateChecked(d.checkedAt || "")
+    setUpdateError(d.error || "")
+  }, [])
 
   React.useEffect(() => {
     let stop = false
@@ -118,7 +140,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setSetupRequired(s.setupRequired)
         setAuthed(s.authed)
         applyHost(s.host)
-        if (s.authed) await refresh()
+        if (s.authed) {
+          await refresh()
+          await loadUpdates()
+        }
         if (!stop) setReady(true)
       })
       .catch((e: Error) => {
@@ -129,7 +154,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       stop = true
     }
-  }, [applyHost, refresh])
+  }, [applyHost, refresh, loadUpdates])
 
   React.useEffect(() => {
     if (!authed) return
@@ -159,7 +184,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dockerError,
       systemdNote,
       homeOrder,
-      setHomeOrder,
+      updates,
+      updateChecked,
+      updateError,
+      setHomeOrder: (ids) => {
+        setHomeOrderState(ids)
+        void api.saveHome(ids)
+      },
+      checkUpdates: async () => {
+        const d = await api.checkUpdates()
+        setUpdates(d.updates ?? [])
+        setUpdateChecked(d.checkedAt || "")
+        setUpdateError(d.error || "")
+      },
       refresh,
       updateMeta: async (id, meta) => {
         const body: ServiceMetaBody = {
@@ -218,6 +255,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dockerError,
       systemdNote,
       homeOrder,
+      updates,
+      updateChecked,
+      updateError,
       refresh,
     ]
   )

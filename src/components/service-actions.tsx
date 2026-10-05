@@ -34,19 +34,18 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { useStore } from "@/lib/store"
-import { updateFor } from "@/mock/alerts"
 import type { Service } from "@/mock/data"
 
 type Confirm = "stop" | "remove" | null
 
 export function useServiceActions(s: Service) {
-  const { flashStatus, act } = useStore()
+  const { flashStatus, act, updates } = useStore()
   const [confirm, setConfirm] = React.useState<Confirm>(null)
   const [edit, setEdit] = React.useState(false)
   const [removeVolumes, setRemoveVolumes] = React.useState(false)
   const [restarting, setRestarting] = React.useState(false)
   const isNative = s.kind === "systemd" || s.kind === "process"
-  const upd = updateFor(s.id)
+  const upd = updates.find((row) => row.serviceIds.includes(s.id))
 
   const perform = async (
     action: string,
@@ -283,15 +282,16 @@ export function ServiceActionsMenu({
           {!isNative && (
             <DropdownMenuItem
               onSelect={() =>
-                toast.info(`正在拉取 ${s.image}`, {
-                  description: upd
-                    ? `${upd.current} 更新到 ${upd.latest}，完成后自动重建容器`
-                    : "检查是否有新版本",
-                })
+                toast.info(
+                  upd
+                    ? `${s.displayName} 的仓库 digest 已变化`
+                    : "还没有发现新的 digest",
+                  { description: "Lumen 只通知，不会拉取或重建容器。" }
+                )
               }
             >
               <IconCloudDownload />
-              {upd ? `更新到 ${upd.latest}` : "检查更新"}
+              {upd ? "有新 digest" : "镜像更新"}
             </DropdownMenuItem>
           )}
           {!isNative && (

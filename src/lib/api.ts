@@ -90,6 +90,7 @@ export const api = {
       services: Service[]
       dockerError: string
       systemdNote?: string
+      homeOrder?: string[]
     }>(await fetch("/api/snapshot", { credentials: "include" })),
   logs: async (id: string) =>
     parse<{ lines: LogLine[] }>(
@@ -218,6 +219,113 @@ export const api = {
         body: JSON.stringify({ action }),
       })
     ),
+  alerts: async () =>
+    parse<{
+      channels: Channel[]
+      rules: AlertRule[]
+      history: AlertEvent[]
+    }>(await fetch("/api/alerts", { credentials: "include" })),
+  saveChannel: async (
+    body: Partial<Channel> & { type: Channel["type"]; name: string }
+  ) =>
+    parse<Channel>(
+      await fetch("/api/channels", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    ),
+  testChannel: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/channels/${encodeURIComponent(id)}/test`, {
+        method: "POST",
+        credentials: "include",
+      })
+    ),
+  saveRule: async (
+    body: Partial<AlertRule> & { kind: AlertRule["kind"]; name: string }
+  ) =>
+    parse<AlertRule>(
+      await fetch("/api/rules", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    ),
+  updates: async () =>
+    parse<{ updates: UpdateRow[]; checkedAt: string; error: string }>(
+      await fetch("/api/updates", { credentials: "include" })
+    ),
+  checkUpdates: async () =>
+    parse<{ updates: UpdateRow[]; checkedAt: string; error: string }>(
+      await fetch("/api/updates/check", {
+        method: "POST",
+        credentials: "include",
+      })
+    ),
+  saveHome: async (ids: string[]) =>
+    parse<{ ok: boolean }>(
+      await fetch("/api/home", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+    ),
+}
+
+export interface Channel {
+  id: string
+  type: "bark" | "telegram" | "wecom"
+  name: string
+  enabled: boolean
+  config: Record<string, string>
+  lastTest?: { ok: boolean; at: string; msg?: string }
+}
+
+export interface AlertRule {
+  id: string
+  kind:
+    | "service_down"
+    | "cpu_high"
+    | "mem_high"
+    | "disk_full"
+    | "update_available"
+    | "unhealthy"
+  name: string
+  enabled: boolean
+  target: string
+  threshold?: number
+  duration?: string
+  channels: string[]
+  cooldown: string
+  resolve?: boolean
+}
+
+export interface AlertEvent {
+  id: string
+  at: string
+  ruleId: string
+  severity: "critical" | "warning" | "info"
+  title: string
+  detail: string
+  state: "firing" | "resolved"
+  resolvedAt?: string
+  sent: { channel: string; ok: boolean }[]
+}
+
+export interface UpdateRow {
+  serviceIds: string[]
+  stack?: string
+  image: string
+  current: string
+  latest: string
+  published: string
+  sizeDeltaMB: number
+  changelog?: string
+  pinned?: boolean
 }
 
 export interface Proc {

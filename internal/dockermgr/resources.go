@@ -89,6 +89,33 @@ func (m *Manager) imageUsers() map[string][]string {
 	return out
 }
 
+func (m *Manager) LocalDigest(ctx context.Context, repo, tag string) (string, error) {
+	list, err := m.cli.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		return "", err
+	}
+	want := repo + ":" + tag
+	for _, img := range list {
+		ok := false
+		for _, t := range img.RepoTags {
+			if t == want || strings.HasSuffix(t, "/"+want) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			continue
+		}
+		for _, d := range img.RepoDigests {
+			if i := strings.LastIndex(d, "@"); i >= 0 {
+				return d[i+1:], nil
+			}
+		}
+		return "", actionError(want + " 没有本地 digest")
+	}
+	return "", actionError("本地没有 " + want)
+}
+
 func (m *Manager) RemoveImage(ctx context.Context, id string) error {
 	_, err := m.cli.ImageRemove(ctx, id, image.RemoveOptions{})
 	return err
