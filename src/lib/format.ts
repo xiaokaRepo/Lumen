@@ -14,6 +14,17 @@ export function fmtPct(v: number) {
   return `${v.toFixed(1)}%`
 }
 
+export function serviceSource(s: {
+  image?: string
+  unit?: string
+  pid?: number
+}) {
+  if (s.image) return s.image
+  if (s.unit) return s.unit
+  if (typeof s.pid === "number") return `PID ${s.pid}`
+  return "无"
+}
+
 export const KIND_LABEL = {
   container: "容器",
   compose: "Compose",

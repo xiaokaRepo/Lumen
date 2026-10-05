@@ -56,7 +56,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { KIND_LABEL } from "@/lib/format"
+import { KIND_LABEL, serviceSource } from "@/lib/format"
 import { useService, useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { api, type LogLine } from "@/lib/api"
@@ -490,14 +490,14 @@ function Detail({ s }: { s: Service }) {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <StatusLabel s={s} />
               <span>
-                {KIND_LABEL[s.kind]}
+                {KIND_LABEL[s.kind] ?? "容器"}
                 {s.stack ? ` / ${s.stack}` : ""}
               </span>
               <span>{s.group}</span>
               <span>{s.uptime}</span>
             </div>
             <span className="tabular truncate text-xs text-muted-foreground">
-              {s.image ?? s.unit ?? `PID ${s.pid}`}
+              {serviceSource(s)}
             </span>
             {s.description && (
               <p className="max-w-[65ch] text-sm">{s.description}</p>
@@ -740,7 +740,7 @@ function Detail({ s }: { s: Service }) {
                   ? [
                       ["名称", s.name],
                       ["单元", s.unit ?? "非 systemd 进程"],
-                      ["主 PID", s.pid],
+                      ["主 PID", typeof s.pid === "number" ? s.pid : "无"],
                       ["启动时长", s.uptime],
                       [
                         "发现方式",

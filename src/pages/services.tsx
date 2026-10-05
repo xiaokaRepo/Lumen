@@ -1,5 +1,4 @@
 import * as React from "react"
-import { motion, useReducedMotion } from "motion/react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -9,7 +8,6 @@ import {
   IconStack2,
 } from "@tabler/icons-react"
 
-import { enterDelay, useEnterOnce } from "@/components/enter"
 import { NumberRoll } from "@/components/number-roll"
 import {
   EmptyState,
@@ -50,7 +48,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { api } from "@/lib/api"
-import { KIND_LABEL } from "@/lib/format"
+import { KIND_LABEL, serviceSource } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { groupNames, portConflicts } from "@/lib/ports"
 import { GROUPS, type Service } from "@/mock/data"
@@ -85,13 +83,11 @@ export function ServicesPage() {
     ? "loading"
     : preview !== "ready"
       ? preview
-      : error
+      : error && services.length === 0
         ? "error"
         : services.length === 0
           ? "empty"
           : "ready"
-  const enter = useEnterOnce("services")
-  const reduce = useReducedMotion()
   const [q, setQ] = React.useState("")
   const [kind, setKind] = React.useState("all")
   const [status, setStatus] = React.useState("all")
@@ -151,14 +147,6 @@ export function ServicesPage() {
             ),
           ] as [string, Service[]],
         ].filter(([, l]) => l.length)
-
-  const rowIndex = new Map<string, number>()
-  {
-    let n = 0
-    for (const [, list] of groups) {
-      for (const s of list) rowIndex.set(s.id, n++)
-    }
-  }
 
   const counts = {
     all: services.length,
@@ -335,21 +323,11 @@ export function ServicesPage() {
                     </TableCell>
                   </TableRow>
                   {list.map((s) => {
-                    const i = rowIndex.get(s.id) ?? 0
-                    const play = enter && !reduce && !q
                     return (
-                      <motion.tr
-                        key={s.id}
-                        data-slot="table-row"
-                        className="cursor-pointer border-b transition-colors duration-200 ease-out hover:bg-muted/50 data-[state=selected]:bg-muted"
+                      <TableRow
+                        key={s.name || s.id}
+                        className="cursor-pointer"
                         onClick={() => nav(`/services/${s.id}`)}
-                        initial={play ? { opacity: 0, y: 6 } : false}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.22,
-                          delay: play ? enterDelay(i) : 0,
-                          ease: [0.22, 1, 0.36, 1],
-                        }}
                       >
                         <TableCell className="pl-4">
                           <div className="flex items-center gap-3">
@@ -357,18 +335,14 @@ export function ServicesPage() {
                               match={s.iconMatch}
                               override={s.iconOverride}
                               kind={s.kind}
-                              layoutId={`icon-${s.id}`}
-                              className="transition-transform duration-200 ease-out group-hover:scale-105"
                             />
                             <div className="flex min-w-0 flex-col">
                               <span className="flex items-center gap-2 font-medium">
-                                <motion.span layoutId={`name-${s.id}`}>
-                                  {s.displayName}
-                                </motion.span>
+                                <span>{s.displayName}</span>
                                 <UpdateBadge id={s.id} />
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {KIND_LABEL[s.kind]}
+                                {KIND_LABEL[s.kind] ?? "容器"}
                                 {s.stack && groupBy === "group"
                                   ? ` / ${s.stack}`
                                   : ""}
@@ -404,7 +378,7 @@ export function ServicesPage() {
                         </TableCell>
                         <TableCell className="hidden max-w-72 xl:table-cell">
                           <span className="tabular block truncate text-xs text-muted-foreground">
-                            {s.image ?? s.unit ?? `PID ${s.pid}`}
+                            {serviceSource(s)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -434,7 +408,7 @@ export function ServicesPage() {
                         >
                           <ServiceActionsMenu s={s} />
                         </TableCell>
-                      </motion.tr>
+                      </TableRow>
                     )
                   })}
                 </React.Fragment>
