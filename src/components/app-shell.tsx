@@ -138,7 +138,7 @@ function AppSidebar() {
                   <IconListDetails className="size-4" />
                 </span>
                 <span className="flex min-w-0 flex-col leading-tight">
-                  <span className="truncate font-semibold">Docker-MM</span>
+                  <span className="truncate font-semibold">Lumen</span>
                   <span className="truncate text-xs text-muted-foreground">
                     {host.model}
                   </span>

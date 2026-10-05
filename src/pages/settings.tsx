@@ -328,7 +328,7 @@ export function SettingsPage() {
           <Section
             id="docker"
             title="Docker 与主机"
-            description="Docker-MM 通过 docker.sock 和 pid: host 读取信息。"
+            description="Lumen 通过 docker.sock 和 pid: host 读取信息。"
           >
             <FieldGroup>
               <Field>
@@ -384,7 +384,7 @@ export function SettingsPage() {
           <Section
             id="security"
             title="安全"
-            description="Docker-MM 能控制所有容器和主机进程，请保护好访问入口。"
+            description="Lumen 能控制所有容器和主机进程，请保护好访问入口。"
           >
             <div className="flex flex-col gap-6">
               <ChangePassword />

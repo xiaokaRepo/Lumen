@@ -1,4 +1,4 @@
-# Docker-MM (UI prototype)
+# Lumen (UI prototype)
 
 Docker, process and service management panel for a UGREEN DXP4800 NAS. This branch contains the **frontend UI prototype only**: every page runs on mock data in `src/mock/`. There is no backend yet.
 

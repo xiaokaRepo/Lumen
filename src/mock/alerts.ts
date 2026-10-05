@@ -41,7 +41,7 @@ export const CHANNEL_META: Record<
         placeholder: "从 Bark App 首页复制",
         secret: true,
       },
-      { key: "group", label: "分组", placeholder: "Docker-MM" },
+      { key: "group", label: "分组", placeholder: "Lumen" },
       {
         key: "level",
         label: "中断级别",

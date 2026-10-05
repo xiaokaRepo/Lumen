@@ -81,7 +81,7 @@ export function EditServiceSheet({
         <SheetHeader className="border-b">
           <SheetTitle>编辑服务信息</SheetTitle>
           <SheetDescription>
-            这些信息只保存在 Docker-MM 中，不会修改容器或 compose 文件。
+            这些信息只保存在 Lumen 中，不会修改容器或 compose 文件。
           </SheetDescription>
         </SheetHeader>
 

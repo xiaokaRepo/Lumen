@@ -223,7 +223,7 @@ export function ServicesPage() {
           title={state === "empty" ? "还没有发现服务" : "没有匹配的服务"}
           description={
             state === "empty"
-              ? "Docker-MM 会自动扫描容器和监听端口的进程。确认已挂载 docker.sock 并启用 pid: host。"
+              ? "Lumen 会自动扫描容器和监听端口的进程。确认已挂载 docker.sock 并启用 pid: host。"
               : "换个关键词，或清除类型和状态筛选。"
           }
           action={

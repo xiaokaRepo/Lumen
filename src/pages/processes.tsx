@@ -162,7 +162,7 @@ export function ProcessesPage() {
 
       {state === "loading" && <TableSkeleton rows={12} cols={6} />}
       {state === "error" && (
-        <ErrorState message="无法读取 /proc。Docker-MM 需要 pid: host 才能看到主机进程。" />
+        <ErrorState message="无法读取 /proc。Lumen 需要 pid: host 才能看到主机进程。" />
       )}
       {(state === "ready" || state === "empty") && (
         <div className="overflow-hidden rounded-xl border bg-card">

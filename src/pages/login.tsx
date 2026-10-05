@@ -122,7 +122,7 @@ export function LoginPage() {
           </span>
           <div className="flex flex-col gap-1">
             <h1 className="text-xl font-semibold tracking-tight">
-              {setup ? "设置管理员密码" : "登录 Docker-MM"}
+              {setup ? "设置管理员密码" : "登录 Lumen"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {host.model} <span className="tabular">{HOST_IP}</span>
@@ -133,7 +133,7 @@ export function LoginPage() {
         {setup && (
           <Alert>
             <AlertDescription>
-              Docker-MM 以 privileged
+              Lumen 以 privileged
               运行，能控制所有容器和主机进程。请设置一个强密码，不要和 UGOS
               账户密码相同。
             </AlertDescription>
@@ -215,7 +215,7 @@ export function LoginPage() {
           <p className="text-xs leading-relaxed text-muted-foreground">
             忘记密码时，在 NAS 上执行{" "}
             <code className="tabular rounded bg-muted px-1 py-0.5 text-foreground">
-              docker exec docker-mm docker-mm reset-password
+              docker exec lumen lumen reset-password
             </code>
           </p>
         )}
