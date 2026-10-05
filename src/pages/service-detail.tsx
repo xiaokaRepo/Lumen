@@ -95,7 +95,7 @@ function useFollow(value: number) {
   React.useEffect(() => {
     if (prev.current === value) return
     prev.current = value
-    setData((d) => [...d, { t: stamp(), v }].slice(-60))
+    setData((d) => [...d, { t: stamp(), v: value }].slice(-60))
   }, [value])
   return data
 }

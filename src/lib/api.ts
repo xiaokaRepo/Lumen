@@ -58,54 +58,54 @@ async function parse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  session: () =>
+  session: async () =>
     parse<{ setupRequired: boolean; authed: boolean; host: HostInfo }>(
-      fetch("/api/session", { credentials: "include" })
+      await fetch("/api/session", { credentials: "include" })
     ),
-  setup: (password: string) =>
+  setup: async (password: string) =>
     parse<{ ok: boolean }>(
-      fetch("/api/setup", {
+      await fetch("/api/setup", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       })
     ),
-  login: (password: string, remember: boolean) =>
+  login: async (password: string, remember: boolean) =>
     parse<{ ok: boolean }>(
-      fetch("/api/login", {
+      await fetch("/api/login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password, remember }),
       })
     ),
-  logout: () =>
+  logout: async () =>
     parse<{ ok: boolean }>(
-      fetch("/api/logout", { method: "POST", credentials: "include" })
+      await fetch("/api/logout", { method: "POST", credentials: "include" })
     ),
-  snapshot: () =>
+  snapshot: async () =>
     parse<{ host: HostInfo; services: Service[]; dockerError: string }>(
-      fetch("/api/snapshot", { credentials: "include" })
+      await fetch("/api/snapshot", { credentials: "include" })
     ),
-  logs: (id: string) =>
+  logs: async (id: string) =>
     parse<{ lines: LogLine[] }>(
-      fetch(`/api/services/${encodeURIComponent(id)}/logs`, {
+      await fetch(`/api/services/${encodeURIComponent(id)}/logs`, {
         credentials: "include",
       })
     ),
-  action: (id: string, action: string, removeVolumes = false) =>
+  action: async (id: string, action: string, removeVolumes = false) =>
     parse<{ ok: boolean }>(
-      fetch(`/api/services/${encodeURIComponent(id)}/action`, {
+      await fetch(`/api/services/${encodeURIComponent(id)}/action`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, removeVolumes }),
       })
     ),
-  saveMeta: (id: string, body: ServiceMetaBody) =>
+  saveMeta: async (id: string, body: ServiceMetaBody) =>
     parse<{ ok: boolean }>(
-      fetch(`/api/services/${encodeURIComponent(id)}`, {
+      await fetch(`/api/services/${encodeURIComponent(id)}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
