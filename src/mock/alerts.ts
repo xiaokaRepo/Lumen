@@ -97,7 +97,7 @@ export const channels: Channel[] = [
     config: {
       server: "https://api.day.app",
       key: "Xq7n2kPzR4tVb9",
-      group: "NAS",
+      group: "Lumen",
       level: "timeSensitive",
     },
     lastTest: { ok: true, at: "今天 09:12" },

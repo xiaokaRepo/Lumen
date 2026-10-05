@@ -156,7 +156,7 @@ export function ProcessesPage() {
     <>
       <PageHeader
         title="进程"
-        description={`${rows === null ? "" : `主机共 ${processes.length} 个进程，负载 ${host.load.join(" / ")}。`}${systemdNote || "通过 pid: host 读取，包含容器内进程。"}`}
+        description={`${rows === null ? "" : `这台机器共 ${processes.length} 个进程，负载 ${host.load.join(" / ")}。`}${systemdNote || "包含容器里的进程。"}`}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -188,7 +188,7 @@ export function ProcessesPage() {
 
       {state === "loading" && <TableSkeleton rows={12} cols={6} />}
       {state === "error" && (
-        <ErrorState message="无法读取 /proc。Lumen 需要 pid: host 才能看到主机进程。" />
+        <ErrorState message="无法读取这台机器的进程。请让 lumen-agent 使用主机的进程命名空间（pid: host）。" />
       )}
       {(state === "ready" || state === "empty") && (
         <div className="overflow-hidden rounded-xl border bg-card">

@@ -242,7 +242,7 @@ func contains(s string, c byte) bool {
 
 func hostname(info *host.InfoStat) string {
 	if info == nil || info.Hostname == "" {
-		return "nas"
+		return "主机"
 	}
 	return info.Hostname
 }

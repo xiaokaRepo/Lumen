@@ -275,7 +275,7 @@ export function IconPicker({
               <div className="flex flex-col items-center gap-3 py-12 text-center">
                 <IconWifiOff className="size-6 text-muted-foreground" />
                 <p className="text-sm">
-                  {error}，请检查 NAS 能否访问 cdn.jsdelivr.net
+                  {error}，请检查这台机器能否访问 cdn.jsdelivr.net
                 </p>
                 <Button size="sm" variant="outline" onClick={retry}>
                   重试
@@ -360,8 +360,8 @@ export function IconPicker({
                   }}
                 />
                 <FieldDescription>
-                  支持 SVG / PNG / WebP。也可以填 NAS 内网地址，例如
-                  http://192.168.31.20:9420/icons/my.png
+                  支持 SVG / PNG / WebP。也可以填局域网地址，例如
+                  http://192.168.1.20/icons/my.png
                 </FieldDescription>
               </Field>
               <div className="flex items-center gap-4 rounded-lg border p-4">

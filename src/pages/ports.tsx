@@ -73,7 +73,6 @@ export function PortsPage() {
       {conflicts.length > 0 && (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {conflicts.map((c) => {
-            const winner = c.rows.find((r) => r.bound)
             return (
               <div
                 key={c.key}
@@ -122,11 +121,7 @@ export function PortsPage() {
                     byId[c.rows.find((r) => !r.bound)?.serviceId ?? ""]
                       ?.displayName
                   }{" "}
-                  的主机端口改为空闲端口
-                  {winner && c.key.startsWith("80/")
-                    ? "，或把 UGOS 管理页改到其他端口后再启动反向代理"
-                    : ""}
-                  。
+                  的主机端口改为空闲端口。
                 </p>
               </div>
             )
@@ -168,7 +163,7 @@ export function PortsPage() {
 
           {state === "loading" && <TableSkeleton rows={12} cols={5} />}
           {state === "error" && (
-            <ErrorState message="读取 /proc/net/tcp 失败。请确认容器使用 pid: host 并以 privileged 运行。" />
+            <ErrorState message="读不到这台机器的端口。请让 lumen-agent 使用主机网络和主机进程命名空间。" />
           )}
           {(state === "ready" || state === "empty") && (
             <div className="overflow-hidden rounded-xl border bg-card">

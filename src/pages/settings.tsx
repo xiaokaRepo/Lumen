@@ -27,6 +27,7 @@ import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { ICON_CDN } from "@/lib/icons"
+import { useStore } from "@/lib/store"
 
 const SECTIONS = [
   { id: "general", label: "通用" },
@@ -187,6 +188,7 @@ const SESSIONS = [
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme()
+  const { host } = useStore()
   const loc = useLocation()
   const [active, setActive] = React.useState(loc.hash.slice(1) || "general")
 
@@ -253,8 +255,7 @@ export function SettingsPage() {
                   </SelectContent>
                 </Select>
                 <FieldDescription>
-                  设为主页后，可以把 http://192.168.31.20:9420
-                  当作浏览器起始页。
+                  设为主页后，可以把面板地址当作浏览器起始页。
                 </FieldDescription>
               </Field>
               <Field>
@@ -318,8 +319,8 @@ export function SettingsPage() {
               </Field>
               <SwitchRow
                 id="cache-icons"
-                label="缓存图标到 NAS"
-                description="首次加载后保存在 /data/icons，离线时也能显示"
+                label="缓存图标到本机"
+                description="首次加载后保存在数据目录，离线时也能显示"
                 defaultChecked
               />
             </FieldGroup>
@@ -328,7 +329,7 @@ export function SettingsPage() {
           <Section
             id="docker"
             title="Docker 与主机"
-            description="Lumen 通过 docker.sock 和 pid: host 读取信息。"
+            description="每台主机上的 lumen-agent 读取本机 Docker 和进程。"
           >
             <FieldGroup>
               <Field>
@@ -339,7 +340,7 @@ export function SettingsPage() {
                   defaultValue="unix:///var/run/docker.sock"
                 />
                 <FieldDescription>
-                  已连接，Docker Engine 27.3.1，API 1.47
+                  lumen-agent 默认使用 unix:///var/run/docker.sock。
                 </FieldDescription>
               </Field>
               <Field>
@@ -450,10 +451,10 @@ export function SettingsPage() {
           <Section id="about" title="关于">
             <dl className="grid grid-cols-2 gap-4 text-sm">
               {[
-                ["版本", "0.1.0 (UI 原型)"],
-                ["运行方式", "privileged, pid: host"],
-                ["主机", "UGREEN DXP4800, Intel N100"],
-                ["系统", "UGOS Pro 1.3.0, Debian 12"],
+                ["主机", host.name || "未连接"],
+                ["CPU", host.cpu || "未上报"],
+                ["系统", host.os || "未上报"],
+                ["内核", host.kernel || "未上报"],
               ].map(([k, v]) => (
                 <div key={k} className="flex flex-col gap-1">
                   <dt className="text-xs text-muted-foreground">{k}</dt>

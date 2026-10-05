@@ -249,7 +249,7 @@ export function ServicesPage() {
           title={state === "empty" ? "还没有发现服务" : "没有匹配的服务"}
           description={
             state === "empty"
-              ? "Lumen 会自动扫描容器和监听端口的进程。确认已挂载 docker.sock 并启用 pid: host。"
+              ? "Lumen 会列出这台主机上的容器。请确认 lumen-agent 已挂载 Docker 套接字，并使用主机的进程命名空间。"
               : "换个关键词，或清除类型和状态筛选。"
           }
           action={

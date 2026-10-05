@@ -1,37 +1,15 @@
-# UGREEN DXP4800 (Intel N100, x86_64).
-# The panel only lists, sends actions, and shows status.
-# lumen-agent on each machine talks to that machine's Docker socket and owns the sleep proxy.
 services:
   lumen:
-    image: lumen:local
-    build: .
+    image: ghcr.io/xiaokarepo/lumen:latest
     container_name: lumen
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "7878:7878"
     volumes:
       - lumen-data:/data
     environment:
       LUMEN_DATA: /data
       LUMEN_ADDR: ":7878"
 
-  lumen-agent:
-    image: lumen-agent:local
-    build:
-      context: .
-      dockerfile: Dockerfile.agent
-    container_name: lumen-agent
-    restart: unless-stopped
-    network_mode: host
-    privileged: true
-    pid: host
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - lumen-agent-data:/data
-    environment:
-      LUMEN_DATA: /data
-      LUMEN_ADDR: ":7879"
-      LUMEN_AGENT_TOKEN: change-me
-
 volumes:
   lumen-data:
-  lumen-agent-data:
