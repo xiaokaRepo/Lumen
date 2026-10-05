@@ -44,10 +44,21 @@ export interface ServiceMetaBody {
   displayName?: string
   group?: string
   webUrl?: string
+  remoteUrl?: string
   description?: string
   iconOverride?: IconRef
   hideOnHome?: boolean
   idleSleep?: boolean
+}
+
+export interface AgentHost {
+  id: string
+  name: string
+  url: string
+  token: string
+  online: boolean
+  via: "" | "lan" | "panel"
+  active: boolean
 }
 
 async function parse<T>(res: Response): Promise<T> {
@@ -93,6 +104,7 @@ export const api = {
       systemdNote?: string
       homeOrder?: string[]
       cardFields?: CardFields
+      onLan?: boolean
     }>(await fetch("/api/snapshot", { credentials: "include" })),
   logs: async (id: string) =>
     parse<{ lines: LogLine[] }>(
@@ -283,6 +295,33 @@ export const api = {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardFields }),
+      })
+    ),
+  hosts: async () =>
+    parse<{ hosts: AgentHost[] }>(
+      await fetch("/api/hosts", { credentials: "include" })
+    ),
+  saveHost: async (body: { id?: string; name: string; url: string; token: string }) =>
+    parse<AgentHost>(
+      await fetch("/api/hosts", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    ),
+  deleteHost: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/hosts/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+    ),
+  activateHost: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/hosts/${encodeURIComponent(id)}/active`, {
+        method: "POST",
+        credentials: "include",
       })
     ),
 }

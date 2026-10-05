@@ -24,6 +24,7 @@ type Meta struct {
 	DisplayName  string   `json:"displayName,omitempty"`
 	Group        string   `json:"group,omitempty"`
 	WebURL       string   `json:"webUrl,omitempty"`
+	RemoteURL    string   `json:"remoteUrl,omitempty"`
 	Description  string   `json:"description,omitempty"`
 	IconOverride *IconRef `json:"iconOverride,omitempty"`
 	HideOnHome   bool     `json:"hideOnHome,omitempty"`
@@ -111,7 +112,10 @@ type fileState struct {
 	Sessions      []remembered        `json:"sessions"`
 	Meta          map[string]Meta     `json:"meta"`
 	HomeOrder     []string            `json:"homeOrder,omitempty"`
+	HomeOrders    map[string][]string `json:"homeOrders,omitempty"`
 	CardFields    *CardFields         `json:"cardFields,omitempty"`
+	Agents        []Agent             `json:"agents,omitempty"`
+	ActiveAgent   string              `json:"activeAgent,omitempty"`
 	Channels      []Channel           `json:"channels,omitempty"`
 	Rules         []AlertRule         `json:"rules,omitempty"`
 	Events        []AlertEvent        `json:"events,omitempty"`

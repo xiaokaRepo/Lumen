@@ -108,7 +108,7 @@ export function OverviewPage() {
   const stacks = new Set(services.filter((s) => s.stack).map((s) => s.stack))
     .size
 
-  if (state === "error") return <ErrorState />
+  if (state === "error") return <ErrorState message={error} />
 
   return (
     <>

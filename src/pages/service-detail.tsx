@@ -17,6 +17,7 @@ import {
 } from "@tabler/icons-react"
 
 import { CopyButton } from "@/components/copy-button"
+import { serviceOpenURL } from "@/lib/open-url"
 import { MetricChart } from "@/components/metric-chart"
 import { NumberRoll } from "@/components/number-roll"
 import { EmptyState } from "@/components/page-states"
@@ -450,7 +451,8 @@ export function ServiceDetailPage() {
 function Detail({ s }: { s: Service }) {
   const { run, restart, restarting, setConfirm, setEdit, dialogs, isNative } =
     useServiceActions(s)
-  const { services } = useStore()
+  const { services, onLan } = useStore()
+  const openURL = serviceOpenURL(s, onLan)
   const conflicts = portConflicts(services).filter((c) =>
     c.rows.some((r) => r.serviceId === s.id)
   )
@@ -503,9 +505,9 @@ function Detail({ s }: { s: Service }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {s.webUrl && (
+          {openURL && (
             <Button asChild>
-              <a href={s.webUrl} target="_blank" rel="noreferrer">
+              <a href={openURL} target="_blank" rel="noreferrer">
                 <IconExternalLink data-icon="inline-start" />
                 打开 Web UI
               </a>

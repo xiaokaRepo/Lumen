@@ -49,6 +49,7 @@ export function EditServiceSheet({
   const [group, setGroup] = React.useState(service.group)
   const [newGroup, setNewGroup] = React.useState("")
   const [url, setUrl] = React.useState(service.webUrl ?? "")
+  const [remote, setRemote] = React.useState(service.remoteUrl ?? "")
   const [desc, setDesc] = React.useState(service.description ?? "")
   const [icon, setIcon] = React.useState<IconRef | undefined>(
     service.iconOverride
@@ -67,6 +68,7 @@ export function EditServiceSheet({
       displayName: name.trim(),
       group: group === "__new" ? newGroup.trim() || service.group : group,
       webUrl: url.trim() || undefined,
+      remoteUrl: remote.trim() || undefined,
       description: desc,
       iconOverride: icon,
       hideOnHome: !showHome,
@@ -170,7 +172,7 @@ export function EditServiceSheet({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="svc-url">Web 地址</FieldLabel>
+              <FieldLabel htmlFor="svc-url">局域网地址</FieldLabel>
               <Input
                 id="svc-url"
                 placeholder="http://192.168.31.20:8096"
@@ -194,8 +196,20 @@ export function EditServiceSheet({
                 </div>
               )}
               <FieldDescription>
-                点击上方端口快速填入。经反向代理访问时可填域名，例如
-                https://media.home.lan
+                人在局域网里打开面板时，卡片用这个地址。
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="svc-remote">远程地址</FieldLabel>
+              <Input
+                id="svc-remote"
+                placeholder="https://app.example.ug.link"
+                value={remote}
+                onChange={(e) => setRemote(e.target.value)}
+              />
+              <FieldDescription>
+                可选。人从 ug.link 或自己的域名打开面板时，卡片改用这个地址。留空则始终用局域网地址。
               </FieldDescription>
             </Field>
 

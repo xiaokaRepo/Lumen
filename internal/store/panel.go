@@ -10,6 +10,14 @@ import (
 func (s *Store) HomeOrder() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if id := s.state.ActiveAgent; id != "" {
+		if s.state.HomeOrders != nil {
+			if ids, ok := s.state.HomeOrders[id]; ok {
+				return append([]string{}, ids...)
+			}
+		}
+		return []string{}
+	}
 	if len(s.state.HomeOrder) == 0 {
 		return []string{}
 	}
@@ -19,6 +27,13 @@ func (s *Store) HomeOrder() []string {
 func (s *Store) SetHomeOrder(ids []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if id := s.state.ActiveAgent; id != "" {
+		if s.state.HomeOrders == nil {
+			s.state.HomeOrders = map[string][]string{}
+		}
+		s.state.HomeOrders[id] = append([]string(nil), ids...)
+		return s.saveLocked()
+	}
 	s.state.HomeOrder = append([]string(nil), ids...)
 	return s.saveLocked()
 }
