@@ -61,7 +61,7 @@ export function EditServiceSheet({
 
   const save = () => {
     if (nameError) return
-    updateMeta(service.id, {
+    void updateMeta(service.id, {
       displayName: name.trim(),
       group: group === "__new" ? newGroup.trim() || service.group : group,
       webUrl: url.trim() || undefined,
@@ -69,10 +69,13 @@ export function EditServiceSheet({
       iconOverride: icon,
       hideOnHome: !showHome,
     })
-    toast.success("已保存", {
-      description: `${name} 的显示信息已更新，不影响容器本身。`,
-    })
-    onOpenChange(false)
+      .then(() => {
+        toast.success("已保存", {
+          description: `${name} 的显示信息已更新，不影响容器本身。`,
+        })
+        onOpenChange(false)
+      })
+      .catch((e: Error) => toast.error(e.message))
   }
 
   return (

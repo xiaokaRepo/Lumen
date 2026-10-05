@@ -35,14 +35,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { KIND_LABEL } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { allPorts, portConflicts } from "@/mock/data"
+import { allPorts, portConflicts } from "@/lib/ports"
 
 export function PortsPage() {
   const state = useViewState()
   const { services } = useStore()
   const byId = Object.fromEntries(services.map((s) => [s.id, s]))
-  const rows = allPorts()
-  const conflicts = portConflicts()
+  const rows = allPorts(services)
+  const conflicts = portConflicts(services)
   const conflictKeys = new Set(conflicts.map((c) => c.key))
   const [proto, setProto] = React.useState("all")
   const [q, setQ] = React.useState("")

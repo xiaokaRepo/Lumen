@@ -48,6 +48,8 @@ export interface Service {
   memLimitMB?: number
   netRxKBs: number
   netTxKBs: number
+  diskReadKBs?: number
+  diskWriteKBs?: number
   uptime: string
   updateAvailable?: string
   restartPolicy?: string
@@ -1465,6 +1467,7 @@ export function zip<K extends string>(
   keys: K[],
   arrays: { t: string; v: number }[][]
 ): ({ t: string } & Record<K, number>)[] {
+  if (!arrays[0]?.length) return []
   return arrays[0].map((p, i) => {
     const row = { t: p.t } as { t: string } & Record<K, number>
     keys.forEach((k, j) => {

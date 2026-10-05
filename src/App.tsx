@@ -24,7 +24,9 @@ import { SettingsPage } from "@/pages/settings"
 import { UpdatesPage } from "@/pages/updates"
 
 function RequireAuth() {
-  const { authed } = useStore()
+  const { authed, ready, setupRequired } = useStore()
+  if (!ready) return null
+  if (setupRequired) return <Navigate to="/login?setup=1" replace />
   return authed ? <Outlet /> : <Navigate to="/login" replace />
 }
 

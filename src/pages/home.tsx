@@ -45,10 +45,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useLiveSample } from "@/lib/live-sample"
+import { groupNames } from "@/lib/ports"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { GROUPS, host, type Service } from "@/mock/data"
+import { GROUPS, type Service } from "@/mock/data"
 
 const STATUS_TEXT: Record<Service["status"], string> = {
   running: "",
@@ -199,8 +199,7 @@ function Tile({
 }
 
 export function HomePage() {
-  const { services, homeOrder, setHomeOrder, updateMeta } = useStore()
-  const live = useLiveSample()
+  const { services, homeOrder, setHomeOrder, updateMeta, host } = useStore()
   const enter = useEnterOnce("home")
   const [editing, setEditing] = React.useState(false)
   const [q, setQ] = React.useState("")
@@ -222,9 +221,9 @@ export function HomePage() {
           .toLowerCase()
           .includes(q.toLowerCase()))
   )
-  const groups = GROUPS.map(
-    (g) => [g, visible.filter((s) => s.group === g)] as const
-  ).filter(([, l]) => l.length)
+  const groups = groupNames(visible, GROUPS)
+    .map((g) => [g, visible.filter((s) => s.group === g)] as const)
+    .filter(([, l]) => l.length)
   const running = byOrder.filter(
     (s) => s.status === "running" && s.health !== "unhealthy"
   ).length
@@ -279,19 +278,26 @@ export function HomePage() {
           <span>
             CPU{" "}
             <span className="text-foreground">
-              <NumberRoll value={live.cpu} suffix="%" />
+              <NumberRoll value={host.cpuPercent} suffix="%" />
             </span>
           </span>
           <span>
             内存{" "}
             <span className="text-foreground">
-              <NumberRoll value={live.memGB} suffix=" GB" />
+              <NumberRoll value={host.memUsedGB} suffix=" GB" />
             </span>
           </span>
           <span>
-            {host.disks[0].mount} 剩余{" "}
-            <span className="tabular text-foreground">
-              {host.disks[0].totalGB - host.disks[0].usedGB} GB
+            {host.disks[0]?.mount ?? "磁盘"} 剩余{" "}
+            <span className="text-foreground">
+              <NumberRoll
+                value={
+                  host.disks[0]
+                    ? host.disks[0].totalGB - host.disks[0].usedGB
+                    : 0
+                }
+                suffix=" GB"
+              />
             </span>
           </span>
         </div>

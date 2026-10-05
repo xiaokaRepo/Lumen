@@ -50,7 +50,8 @@ import {
 } from "@/components/ui/tooltip"
 import { KIND_LABEL } from "@/lib/format"
 import { useStore } from "@/lib/store"
-import { GROUPS, portConflicts, type Service } from "@/mock/data"
+import { groupNames, portConflicts } from "@/lib/ports"
+import { GROUPS, type Service } from "@/mock/data"
 import { updateFor } from "@/mock/alerts"
 
 export function UpdateBadge({ id }: { id: string }) {
@@ -76,9 +77,18 @@ export function UpdateBadge({ id }: { id: string }) {
 }
 
 export function ServicesPage() {
-  const state = useViewState()
+  const preview = useViewState()
   const nav = useNavigate()
-  const { services } = useStore()
+  const { services, ready, error, refresh } = useStore()
+  const state = !ready
+    ? "loading"
+    : preview !== "ready"
+      ? preview
+      : error
+        ? "error"
+        : services.length === 0
+          ? "empty"
+          : "ready"
   const enter = useEnterOnce("services")
   const reduce = useReducedMotion()
   const [q, setQ] = React.useState("")
@@ -87,7 +97,7 @@ export function ServicesPage() {
   const [groupBy, setGroupBy] = React.useState<"group" | "stack">("group")
 
   const conflictPorts = new Set(
-    portConflicts().flatMap((c) =>
+    portConflicts(services).flatMap((c) =>
       c.rows.map((r) => `${r.serviceId}:${r.port}/${r.proto}`)
     )
   )
@@ -113,10 +123,12 @@ export function ServicesPage() {
 
   const groups: [string, Service[]][] =
     groupBy === "group"
-      ? GROUPS.map(
-          (g) =>
-            [g, filtered.filter((s) => s.group === g)] as [string, Service[]]
-        ).filter(([, l]) => l.length)
+      ? groupNames(filtered, GROUPS)
+          .map(
+            (g) =>
+              [g, filtered.filter((s) => s.group === g)] as [string, Service[]]
+          )
+          .filter(([, l]) => l.length)
       : [
           ...[
             ...new Set(filtered.filter((s) => s.stack).map((s) => s.stack!)),
@@ -161,7 +173,7 @@ export function ServicesPage() {
         title="服务"
         description="自动发现的 Docker 容器、Compose 栈、systemd 服务和监听端口的主机进程。"
         actions={
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => void refresh()}>
             <IconRefresh data-icon="inline-start" />
             重新扫描
           </Button>
@@ -241,7 +253,7 @@ export function ServicesPage() {
           }
           action={
             state === "empty" ? (
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => void refresh()}>
                 重新扫描
               </Button>
             ) : (

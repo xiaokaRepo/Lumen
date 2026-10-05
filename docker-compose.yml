@@ -1,0 +1,20 @@
+# UGREEN DXP4800 (Intel N100, x86_64). One image, host Docker socket, host PID namespace.
+services:
+  lumen:
+    image: lumen:local
+    build: .
+    container_name: lumen
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    ports:
+      - "7878:7878"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - lumen-data:/data
+    environment:
+      LUMEN_DATA: /data
+      LUMEN_ADDR: ":7878"
+
+volumes:
+  lumen-data:

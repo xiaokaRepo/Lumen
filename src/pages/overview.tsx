@@ -5,7 +5,6 @@ import {
   IconArrowDown,
   IconArrowUp,
   IconChevronRight,
-  IconCloudDownload,
   IconPlugConnectedX,
   IconRotateClockwise,
 } from "@tabler/icons-react"
@@ -27,12 +26,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { KIND_LABEL } from "@/lib/format"
-import { useLiveSample } from "@/lib/live-sample"
+import { portConflicts } from "@/lib/ports"
 import { useStore } from "@/lib/store"
-import { host, portConflicts, series, zip } from "@/mock/data"
-import { updates } from "@/mock/alerts"
-
-const diskSeries = series(3, 60, 63, 0.2)
+import { zip } from "@/mock/data"
 
 function Metric({
   label,
@@ -56,12 +52,18 @@ function Metric({
 }
 
 export function OverviewPage() {
-  const state = useViewState()
-  const { services } = useStore()
-  const live = useLiveSample()
+  const preview = useViewState()
+  const { services, host, series, ready, error } = useStore()
   const [range, setRange] = React.useState("cpu")
-  const conflicts = portConflicts()
+  const conflicts = portConflicts(services)
   const disk = host.disks[0]
+  const state = !ready
+    ? "loading"
+    : preview !== "ready"
+      ? preview
+      : error
+        ? "error"
+        : "ready"
 
   const attention = [
     ...services
@@ -85,15 +87,11 @@ export function OverviewPage() {
       .map((s) => ({
         icon: IconAlertTriangle,
         title: `${s.displayName} 已停止`,
-        sub: s.lastError ?? `退出码 ${s.exitCode}`,
+        sub:
+          s.lastError ||
+          (s.exitCode !== undefined ? `退出码 ${s.exitCode}` : "容器已退出"),
         to: `/services/${s.id}`,
       })),
-    {
-      icon: IconCloudDownload,
-      title: `${updates.length} 个镜像有可用更新`,
-      sub: updates.map((u) => u.image.split("/").at(-1)).join(", "),
-      to: "/updates",
-    },
   ]
 
   const top = [...services].sort((a, b) => b.cpu - a.cpu).slice(0, 7)
@@ -125,15 +123,15 @@ export function OverviewPage() {
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>*]:bg-card">
           <Metric
             label="CPU"
-            value={<NumberRoll value={live.cpu} suffix="%" />}
+            value={<NumberRoll value={host.cpuPercent} suffix="%" />}
             sub={`${host.cpu} ${host.cores}，${host.cpuTempC}°C，负载 ${host.load.join(" / ")}`}
-            spark={live.cpuSeries}
+            spark={series.cpu}
           />
           <Metric
             label="内存"
             value={
               <>
-                <NumberRoll value={live.memGB} />
+                <NumberRoll value={host.memUsedGB} />
                 <span className="text-base text-muted-foreground">
                   {" "}
                   / {host.memTotalGB} GB
@@ -141,21 +139,29 @@ export function OverviewPage() {
               </>
             }
             sub={`缓存 ${host.memCacheGB} GB，交换 ${host.swapUsedGB} / ${host.swapTotalGB} GB`}
-            spark={live.memSeries}
+            spark={series.mem}
           />
           <Metric
             label={`存储 ${disk.mount}`}
             value={
-              <>
-                {disk.usedGB}
-                <span className="text-base text-muted-foreground">
-                  {" "}
-                  / {disk.totalGB} GB
-                </span>
-              </>
+              disk ? (
+                <>
+                  <NumberRoll value={disk.usedGB} />
+                  <span className="text-base text-muted-foreground">
+                    {" "}
+                    / {disk.totalGB} GB
+                  </span>
+                </>
+              ) : (
+                "无"
+              )
             }
-            sub={`${disk.label} ${disk.fs}，剩余 ${disk.totalGB - disk.usedGB} GB`}
-            spark={diskSeries}
+            sub={
+              disk
+                ? `${disk.label} ${disk.fs}，剩余 ${Math.round((disk.totalGB - disk.usedGB) * 10) / 10} GB`
+                : "没有读到磁盘"
+            }
+            spark={series.disk}
           />
           <Metric
             label="网络"
@@ -163,17 +169,17 @@ export function OverviewPage() {
               <span className="flex items-baseline gap-3">
                 <span className="inline-flex items-center gap-0.5">
                   <IconArrowDown className="size-4 text-muted-foreground" />
-                  <NumberRoll value={live.rx} />
+                  <NumberRoll value={host.netRxMBs} />
                 </span>
                 <span className="inline-flex items-center gap-0.5">
                   <IconArrowUp className="size-4 text-muted-foreground" />
-                  <NumberRoll value={live.tx} />
+                  <NumberRoll value={host.netTxMBs} />
                 </span>
                 <span className="text-base text-muted-foreground">MB/s</span>
               </span>
             }
             sub={host.netIface}
-            spark={live.rxSeries}
+            spark={series.rx}
           />
         </div>
       )}
@@ -199,7 +205,7 @@ export function OverviewPage() {
           <CardContent>
             {range === "cpu" && (
               <MetricChart
-                data={zip(["cpu"], [live.cpuSeries])}
+                data={zip(["cpu"], [series.cpu])}
                 config={{ cpu: { label: "CPU %", color: "var(--foreground)" } }}
                 max={100}
                 height={220}
@@ -207,7 +213,7 @@ export function OverviewPage() {
             )}
             {range === "mem" && (
               <MetricChart
-                data={zip(["mem"], [live.memSeries])}
+                data={zip(["mem"], [series.mem])}
                 config={{
                   mem: { label: "内存 %", color: "var(--foreground)" },
                 }}
@@ -217,7 +223,7 @@ export function OverviewPage() {
             )}
             {range === "net" && (
               <MetricChart
-                data={zip(["rx", "tx"], [live.rxSeries, live.txSeries])}
+                data={zip(["rx", "tx"], [series.rx, series.tx])}
                 config={{
                   rx: { label: "下行 MB/s", color: "var(--foreground)" },
                   tx: { label: "上行 MB/s", color: "var(--success)" },

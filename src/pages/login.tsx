@@ -27,7 +27,6 @@ import {
 import { Label } from "@/components/ui/label"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { HOST_IP, host } from "@/mock/data"
 
 function strength(pw: string) {
   let s = 0
@@ -79,21 +78,27 @@ function PasswordInput({
 }
 
 export function LoginPage() {
-  const { setAuthed } = useStore()
+  const {
+    host,
+    login,
+    setup: savePassword,
+    authed,
+    ready,
+    setupRequired,
+  } = useStore()
   const nav = useNavigate()
   const [params] = useSearchParams()
-  const setup = params.has("setup")
-  const [pw, setPw] = React.useState(
-    params.get("state") === "error" ? "wrong-pass" : ""
-  )
+  const setup = params.has("setup") || setupRequired
+  const [pw, setPw] = React.useState("")
   const [pw2, setPw2] = React.useState("")
-  const [error, setError] = React.useState<string | null>(
-    params.get("state") === "error"
-      ? "密码错误，还可以尝试 3 次，之后锁定 15 分钟"
-      : null
-  )
+  const [remember, setRemember] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
   const st = strength(pw)
+
+  React.useEffect(() => {
+    if (ready && authed) nav("/", { replace: true })
+  }, [ready, authed, nav])
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,13 +109,11 @@ export function LoginPage() {
       return setError("请输入密码")
     }
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      if (!setup && pw === "wrong-pass")
-        return setError("密码错误，还可以尝试 2 次，之后锁定 15 分钟")
-      setAuthed(true)
-      nav("/")
-    }, 700)
+    const task = setup ? savePassword(pw) : login(pw, remember)
+    task
+      .then(() => nav("/"))
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false))
   }
 
   return (
@@ -125,7 +128,7 @@ export function LoginPage() {
               {setup ? "设置管理员密码" : "登录 Lumen"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {host.model} <span className="tabular">{HOST_IP}</span>
+              {host.model || "主机"} <span className="tabular">{host.ip}</span>
             </p>
           </div>
         </div>
@@ -196,7 +199,11 @@ export function LoginPage() {
             )}
             {!setup && (
               <div className="flex items-center gap-2">
-                <Checkbox id="remember" defaultChecked />
+                <Checkbox
+                  id="remember"
+                  checked={remember}
+                  onCheckedChange={(v) => setRemember(!!v)}
+                />
                 <Label htmlFor="remember" className="font-normal">
                   在这台设备上保持登录 7 天
                 </Label>
