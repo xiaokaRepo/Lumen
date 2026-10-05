@@ -218,7 +218,22 @@ func (c *Ctl) stackNames(project string) []string {
 	return names
 }
 
+func (c *Ctl) expandStack(names []string) []string {
+	c.docker.RefreshNow()
+	for _, name := range names {
+		svc, ok := c.docker.One(name)
+		if !ok || svc.Stack == "" {
+			continue
+		}
+		if fresh := c.stackNames(svc.Stack); len(fresh) > 0 {
+			return fresh
+		}
+	}
+	return names
+}
+
 func (c *Ctl) sleepNames(ctx context.Context, names []string) error {
+	names = c.expandStack(names)
 	un := c.hold(names...)
 	defer un()
 	for _, name := range names {
@@ -297,6 +312,7 @@ func (c *Ctl) wakeNames(ctx context.Context, names []string) error {
 	if len(names) == 0 {
 		return errors.New("没有这个服务")
 	}
+	names = c.expandStack(names)
 	un := c.hold(names...)
 	defer un()
 	var first error
