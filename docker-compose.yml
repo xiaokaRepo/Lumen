@@ -11,5 +11,22 @@ services:
       LUMEN_DATA: /data
       LUMEN_ADDR: ":7878"
 
+  lumen-agent:
+    image: ghcr.io/xiaokarepo/lumen-agent:latest
+    container_name: lumen-agent
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - lumen-agent-data:/data
+    environment:
+      LUMEN_DATA: /data
+      LUMEN_ADDR: ":7879"
+      LUMEN_AGENT_TOKEN: change-me-please
+      LUMEN_PANEL: http://127.0.0.1:7878
+
 volumes:
   lumen-data:
+  lumen-agent-data:
