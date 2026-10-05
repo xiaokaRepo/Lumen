@@ -54,10 +54,9 @@ import { KIND_LABEL } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { groupNames, portConflicts } from "@/lib/ports"
 import { GROUPS, type Service } from "@/mock/data"
-import { updateFor } from "@/mock/alerts"
 
 export function UpdateBadge({ id }: { id: string }) {
-  const u = updateFor(id)
+  const u = useStore().updates.find((row) => row.serviceIds.includes(id))
   if (!u) return null
   return (
     <Tooltip>

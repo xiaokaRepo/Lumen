@@ -148,6 +148,7 @@ export interface AlertRule {
   duration?: string
   channels: string[]
   cooldown: string
+  resolve?: boolean
 }
 
 export const RULE_META: Record<RuleKind, { label: string; unit?: string }> = {

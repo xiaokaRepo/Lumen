@@ -12,7 +12,9 @@ import (
 
 	"github.com/xiaokaRepo/lumen/internal/dockermgr"
 	"github.com/xiaokaRepo/lumen/internal/hoststat"
+	"github.com/xiaokaRepo/lumen/internal/imgupd"
 	"github.com/xiaokaRepo/lumen/internal/metrics"
+	"github.com/xiaokaRepo/lumen/internal/notify"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
@@ -51,6 +53,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/volumes/prune", s.authed(s.pruneVolumes))
 	mux.HandleFunc("DELETE /api/volumes/{id}", s.authed(s.deleteVolume))
 	mux.HandleFunc("POST /api/stacks/{id}/action", s.authed(s.stack))
+	mux.HandleFunc("GET /api/alerts", s.authed(s.alerts))
+	mux.HandleFunc("PUT /api/channels", s.authed(s.putChannel))
+	mux.HandleFunc("DELETE /api/channels/{id}", s.authed(s.deleteChannel))
+	mux.HandleFunc("POST /api/channels/{id}/test", s.authed(s.testChannel))
+	mux.HandleFunc("PUT /api/rules", s.authed(s.putRule))
+	mux.HandleFunc("GET /api/updates", s.authed(s.updates))
+	mux.HandleFunc("POST /api/updates/check", s.authed(s.checkUpdates))
+	mux.HandleFunc("PUT /api/home", s.authed(s.putHome))
 	if s.Static != "" {
 		mux.Handle("/", s.spa())
 	}
@@ -169,6 +179,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 		"services":    out,
 		"dockerError": errText,
 		"systemdNote": note,
+		"homeOrder":   s.Store.HomeOrder(),
 	})
 }
 
@@ -460,6 +471,119 @@ func (s *Server) stack(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Docker.StackAction(r.Context(), r.PathValue("id"), body.Action); err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) alerts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"channels": s.Store.Channels(),
+		"rules":    s.Store.Rules(),
+		"history":  s.Store.Events(),
+	})
+}
+
+func (s *Server) putChannel(w http.ResponseWriter, r *http.Request) {
+	var body store.Channel
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if body.Type != "bark" && body.Type != "telegram" && body.Type != "wecom" {
+		writeErr(w, http.StatusBadRequest, "渠道只能是 Bark、Telegram 或企业微信")
+		return
+	}
+	saved, err := s.Store.PutChannel(body)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
+	if err := s.Store.DeleteChannel(r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) testChannel(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var ch store.Channel
+	found := false
+	for _, c := range s.Store.Channels() {
+		if c.ID == id {
+			ch = c
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeErr(w, http.StatusNotFound, "没有这个渠道")
+		return
+	}
+	err := notify.Send(ch, "Lumen 测试", "这是一条测试通知，面板可以连上这个渠道。")
+	if err != nil {
+		s.Store.MarkTest(id, false, err.Error())
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.Store.MarkTest(id, true, "测试成功")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) putRule(w http.ResponseWriter, r *http.Request) {
+	var body store.AlertRule
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" || body.Kind == "" {
+		writeErr(w, http.StatusBadRequest, "规则需要名称和类型")
+		return
+	}
+	saved, err := s.Store.PutRule(body)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
+	rows, at, errText := s.Store.Updates()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"updates": rows, "checkedAt": at, "error": errText,
+	})
+}
+
+func (s *Server) checkUpdates(w http.ResponseWriter, r *http.Request) {
+	rows, errText := imgupd.Check(r.Context(), s.Docker)
+	if err := s.Store.SetUpdates(rows, errText); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"updates": rows, "checkedAt": "刚刚", "error": errText,
+	})
+}
+
+func (s *Server) putHome(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "无法读取请求")
+		return
+	}
+	if body.IDs == nil {
+		body.IDs = []string{}
+	}
+	if err := s.Store.SetHomeOrder(body.IDs); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

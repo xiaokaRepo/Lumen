@@ -4,7 +4,6 @@ import { toast } from "sonner"
 import {
   IconAlertTriangle,
   IconBell,
-  IconBellOff,
   IconBrandTelegram,
   IconBrandWechat,
   IconCheck,
@@ -77,13 +76,12 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import {
   CHANNEL_META,
-  channels,
-  history,
   RULE_META,
-  rules,
+  type AlertEvent,
   type AlertRule,
   type Channel,
   type ChannelType,
@@ -119,9 +117,24 @@ function ChannelGlyph({
   )
 }
 
-const chName = (id: string) => channels.find((c) => c.id === id)
+interface Board {
+  channels: Channel[]
+  rules: AlertRule[]
+  history: AlertEvent[]
+  reload: () => void
+}
+
+const BoardCtx = React.createContext<Board | null>(null)
+
+function useBoard() {
+  const v = React.useContext(BoardCtx)
+  if (!v) throw new Error("alerts board")
+  return v
+}
 
 function History() {
+  const { history, rules, channels } = useBoard()
+  const chName = (id: string) => channels.find((c) => c.id === id)
   const [filter, setFilter] = React.useState("all")
   const list = history.filter((e) => filter === "all" || e.state === filter)
   return (
@@ -244,6 +257,7 @@ function RuleSheet({
   const [picked, setPicked] = React.useState<string[]>(
     rule?.channels ?? ["bark-iphone"]
   )
+  const { channels, reload } = useBoard()
   const unit = RULE_META[kind].unit
   const tNum = Number(threshold)
   const tErr =
@@ -402,11 +416,31 @@ function RuleSheet({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button
+            <Button
             disabled={!!tErr}
             onClick={() => {
-              toast.success("规则已保存")
-              onOpenChange(false)
+              const name =
+                (document.getElementById("r-name") as HTMLInputElement | null)
+                  ?.value.trim() || RULE_META[kind].label
+              api
+                .saveRule({
+                  id: rule?.id,
+                  kind,
+                  name,
+                  enabled: true,
+                  target: rule?.target || "all",
+                  threshold: unit ? Number(threshold) : undefined,
+                  duration: unit ? "5 分钟" : "立即",
+                  channels: picked,
+                  cooldown: "30 分钟",
+                  resolve: true,
+                })
+                .then(() => {
+                  toast.success("规则已保存")
+                  reload()
+                  onOpenChange(false)
+                })
+                .catch((e: Error) => toast.error(e.message))
             }}
           >
             保存规则
@@ -418,11 +452,10 @@ function RuleSheet({
 }
 
 function Rules() {
+  const { rules, channels, reload } = useBoard()
   const [editing, setEditing] = React.useState<AlertRule | undefined>()
   const [open, setOpen] = React.useState(false)
-  const [enabled, setEnabled] = React.useState(() =>
-    Object.fromEntries(rules.map((r) => [r.id, r.enabled]))
-  )
+  const [enabled, setEnabled] = React.useState<Record<string, boolean>>({})
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
@@ -453,15 +486,21 @@ function Rules() {
             {rules.map((r) => (
               <TableRow
                 key={r.id}
-                className={cn(!enabled[r.id] && "text-muted-foreground")}
+                className={cn(
+                  (enabled[r.id] ?? r.enabled) === false && "text-muted-foreground"
+                )}
               >
                 <TableCell className="pl-4">
                   <Switch
                     size="sm"
-                    checked={enabled[r.id]}
-                    onCheckedChange={(v) =>
+                    checked={enabled[r.id] ?? r.enabled}
+                    onCheckedChange={(v) => {
                       setEnabled((e) => ({ ...e, [r.id]: v }))
-                    }
+                      api
+                        .saveRule({ ...r, enabled: v })
+                        .then(reload)
+                        .catch((e: Error) => toast.error(e.message))
+                    }}
                     aria-label={`启用 ${r.name}`}
                   />
                 </TableCell>
@@ -491,7 +530,8 @@ function Rules() {
                 <TableCell className="hidden md:table-cell">
                   <span className="flex gap-1">
                     {r.channels.map((id) => {
-                      const c = chName(id)!
+                      const c = channels.find((x) => x.id === id)
+                      if (!c) return null
                       const I = CHANNEL_ICON[c.type]
                       return (
                         <span
@@ -537,6 +577,7 @@ function Rules() {
 }
 
 function ChannelCard({ c }: { c: Channel }) {
+  const { reload } = useBoard()
   const meta = CHANNEL_META[c.type]
   const [on, setOn] = React.useState(c.enabled)
   const [test, setTest] = React.useState<"idle" | "sending" | "ok" | "fail">(
@@ -549,17 +590,19 @@ function ChannelCard({ c }: { c: Channel }) {
   )
   const send = () => {
     setTest("sending")
-    setTimeout(() => {
-      const ok = c.type !== "telegram"
-      setTest(ok ? "ok" : "fail")
-      setMsg(
-        ok
-          ? "刚刚 测试成功，请在设备上确认收到"
-          : "刚刚：连接 api.telegram.org 超时 (10s)，请检查代理"
-      )
-      if (ok) toast.success(`测试通知已发送到 ${c.name}`)
-      else toast.error(`${c.name} 发送失败`)
-    }, 1100)
+    api
+      .testChannel(c.id)
+      .then(() => {
+        setTest("ok")
+        setMsg("刚刚 测试成功")
+        toast.success(`测试通知已发送到 ${c.name}`)
+        reload()
+      })
+      .catch((e: Error) => {
+        setTest("fail")
+        setMsg(e.message)
+        toast.error(e.message)
+      })
   }
   return (
     <Card className={cn(!on && "opacity-70")}>
@@ -572,7 +615,17 @@ function ChannelCard({ c }: { c: Channel }) {
           </div>
         </div>
         <CardAction>
-          <Switch checked={on} onCheckedChange={setOn} aria-label="启用渠道" />
+          <Switch
+            checked={on}
+            onCheckedChange={(v) => {
+              setOn(v)
+              api
+                .saveChannel({ ...c, enabled: v })
+                .then(reload)
+                .catch((e: Error) => toast.error(e.message))
+            }}
+            aria-label="启用渠道"
+          />
         </CardAction>
       </CardHeader>
       <CardContent>
@@ -622,7 +675,25 @@ function ChannelCard({ c }: { c: Channel }) {
           )}
           测试发送
         </Button>
-        <Button size="sm" onClick={() => toast.success("渠道已保存")}>
+        <Button
+          size="sm"
+          onClick={() => {
+            const config = { ...c.config }
+            for (const f of meta.fields) {
+              const el = document.getElementById(
+                `${c.id}-${f.key}`
+              ) as HTMLInputElement | null
+              if (el) config[f.key] = el.value
+            }
+            api
+              .saveChannel({ ...c, enabled: on, config })
+              .then(() => {
+                toast.success("渠道已保存")
+                reload()
+              })
+              .catch((e: Error) => toast.error(e.message))
+          }}
+        >
           保存
         </Button>
       </CardFooter>
@@ -631,6 +702,7 @@ function ChannelCard({ c }: { c: Channel }) {
 }
 
 function Channels() {
+  const { channels, reload } = useBoard()
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
@@ -645,7 +717,23 @@ function Channels() {
             {(Object.keys(CHANNEL_META) as ChannelType[]).map((t) => {
               const I = CHANNEL_ICON[t]
               return (
-                <DropdownMenuItem key={t}>
+                <DropdownMenuItem
+                  key={t}
+                  onSelect={() =>
+                    api
+                      .saveChannel({
+                        type: t,
+                        name: CHANNEL_META[t].label,
+                        enabled: true,
+                        config: {},
+                      })
+                      .then(() => {
+                        toast.success(`已添加 ${CHANNEL_META[t].label}`)
+                        reload()
+                      })
+                      .catch((e: Error) => toast.error(e.message))
+                  }
+                >
                   <I />
                   {CHANNEL_META[t].label}
                 </DropdownMenuItem>
@@ -666,21 +754,33 @@ function Channels() {
 export function AlertsPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get("tab") ?? "history"
-  const empty = params.get("state") === "empty"
+  const previewEmpty = params.get("state") === "empty"
+  const [board, setBoard] = React.useState<Omit<Board, "reload">>({
+    channels: [],
+    rules: [],
+    history: [],
+  })
+  const reload = React.useCallback(() => {
+    api
+      .alerts()
+      .then((d) =>
+        setBoard({
+          channels: d.channels ?? [],
+          rules: d.rules ?? [],
+          history: d.history ?? [],
+        })
+      )
+      .catch((e: Error) => toast.error(e.message))
+  }, [])
+  React.useEffect(() => {
+    reload()
+  }, [reload])
+  const empty = previewEmpty || board.history.length === 0
   return (
-    <>
+    <BoardCtx.Provider value={{ ...board, reload }}>
       <PageHeader
         title="告警"
         description="服务停止、资源过高、磁盘将满和镜像更新时，通过 Bark、Telegram 或企业微信通知你。"
-        actions={
-          <Button
-            variant="outline"
-            onClick={() => toast.success("已静音 1 小时")}
-          >
-            <IconBellOff data-icon="inline-start" />
-            静音 1 小时
-          </Button>
-        }
       />
       <Tabs
         value={tab}
@@ -692,13 +792,13 @@ export function AlertsPage() {
           <TabsTrigger value="rules">
             规则{" "}
             <span className="tabular text-muted-foreground">
-              {rules.length}
+              {board.rules.length}
             </span>
           </TabsTrigger>
           <TabsTrigger value="channels">
             通知渠道{" "}
             <span className="tabular text-muted-foreground">
-              {channels.length}
+              {board.channels.length}
             </span>
           </TabsTrigger>
         </TabsList>
@@ -720,6 +820,6 @@ export function AlertsPage() {
           <Channels />
         </TabsContent>
       </Tabs>
-    </>
+    </BoardCtx.Provider>
   )
 }
