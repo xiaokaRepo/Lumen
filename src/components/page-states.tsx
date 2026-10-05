@@ -113,7 +113,7 @@ export function ErrorState({ message }: { message?: string }) {
         <EmptyTitle>无法连接 Docker</EmptyTitle>
         <EmptyDescription>
           {message ??
-            "读取 /var/run/docker.sock 失败：permission denied。请确认容器以 privileged 运行并挂载了 docker.sock。"}
+            "连不上这台主机的 Docker。请确认 lumen-agent 挂载了 /var/run/docker.sock。"}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>

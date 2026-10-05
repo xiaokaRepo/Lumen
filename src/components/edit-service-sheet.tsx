@@ -204,12 +204,12 @@ export function EditServiceSheet({
               <FieldLabel htmlFor="svc-remote">远程地址</FieldLabel>
               <Input
                 id="svc-remote"
-                placeholder="https://app.example.ug.link"
+                placeholder="https://app.example.com"
                 value={remote}
                 onChange={(e) => setRemote(e.target.value)}
               />
               <FieldDescription>
-                可选。人从 ug.link 或自己的域名打开面板时，卡片改用这个地址。留空则始终用局域网地址。
+                可选。人从公网域名打开面板时，卡片改用这个地址。留空则始终用局域网地址。
               </FieldDescription>
             </Field>
 

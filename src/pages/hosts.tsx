@@ -145,7 +145,7 @@ export function HostsPage() {
               id="host-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="书房 NAS"
+              placeholder="书房的机器"
             />
           </Field>
           <Field>
@@ -158,7 +158,7 @@ export function HostsPage() {
               className="tabular"
             />
             <FieldDescription>
-              同一局域网填写 agent 的地址，面板会去连接它。Agent 在别的 NAT 后面时留空，让它用 LUMEN_PANEL 连到这块面板。UGREENlink 只用来给人打开页面。
+              同一局域网填写 agent 的地址，面板会去连接它。Agent 在面板拨不进去的网络里时留空，让它用 LUMEN_PANEL 连到这块面板。
             </FieldDescription>
           </Field>
           <Field>
