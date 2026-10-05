@@ -83,7 +83,7 @@ export function OverviewPage() {
       to: "/ports",
     })),
     ...services
-      .filter((s) => s.status === "exited")
+      .filter((s) => s.status === "exited" && !s.sleeping)
       .map((s) => ({
         icon: IconAlertTriangle,
         title: `${s.displayName} 已停止`,

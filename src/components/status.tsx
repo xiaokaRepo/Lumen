@@ -35,9 +35,22 @@ export function StatusLabel({
   s,
   className,
 }: {
-  s: Pick<Service, "status" | "health" | "exitCode">
+  s: Pick<Service, "status" | "health" | "exitCode" | "sleeping">
   className?: string
 }) {
+  if (s.sleeping) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-2 text-sm whitespace-nowrap text-muted-foreground",
+          className
+        )}
+      >
+        <span className="size-1.5 rounded-full bg-muted-foreground/70" aria-hidden />
+        休眠中
+      </span>
+    )
+  }
   const st = STATUS[s.status]
   const unhealthy = s.health === "unhealthy"
   const error =

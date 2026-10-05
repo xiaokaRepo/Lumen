@@ -7,20 +7,27 @@ export interface PortRow {
   serviceId: string
   containerPort?: number
   bound: boolean
+  proxy?: boolean
 }
 
 export function allPorts(services: Service[]): PortRow[] {
   const rows: PortRow[] = []
   for (const s of services) {
-    const bound = s.status === "running" || s.status === "paused"
+    const bound =
+      (s.status === "running" || s.status === "paused") && !s.sleeping
     for (const p of s.ports) {
-      rows.push(rowFrom(s.id, p, bound))
+      rows.push(rowFrom(s.id, p, bound, !!p.proxy))
     }
   }
   return rows.sort((a, b) => a.port - b.port || a.proto.localeCompare(b.proto))
 }
 
-function rowFrom(serviceId: string, p: PortBinding, bound: boolean): PortRow {
+function rowFrom(
+  serviceId: string,
+  p: PortBinding,
+  bound: boolean,
+  proxy: boolean
+): PortRow {
   return {
     port: p.host,
     proto: p.proto,
@@ -28,6 +35,7 @@ function rowFrom(serviceId: string, p: PortBinding, bound: boolean): PortRow {
     serviceId,
     containerPort: p.container,
     bound,
+    proxy,
   }
 }
 

@@ -241,11 +241,19 @@ export function PortsPage() {
                           {r.ip}
                         </TableCell>
                         <TableCell>
-                          {r.bound ? (
+                          {r.proxy ? (
+                            <span className="text-sm text-muted-foreground">
+                              Lumen 代听
+                            </span>
+                          ) : r.bound ? (
                             <span className="text-sm">监听中</span>
                           ) : (
                             <span className="text-sm text-muted-foreground">
-                              {conflict ? "未能绑定" : "未监听"}
+                              {conflict
+                                ? "未能绑定"
+                                : byId[r.serviceId]?.sleeping
+                                  ? "未绑定"
+                                  : "未监听"}
                             </span>
                           )}
                         </TableCell>

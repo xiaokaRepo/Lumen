@@ -24,6 +24,7 @@ type PortBinding struct {
 	Proto     string `json:"proto"`
 	IP        string `json:"ip,omitempty"`
 	Web       bool   `json:"web,omitempty"`
+	Proxy     bool   `json:"proxy,omitempty"`
 }
 
 type EnvVar struct {
@@ -72,6 +73,8 @@ type Service struct {
 	ExitCode      *int           `json:"exitCode,omitempty"`
 	LastError     string         `json:"lastError,omitempty"`
 	HideOnHome    bool           `json:"hideOnHome,omitempty"`
+	Sleeping      bool           `json:"sleeping,omitempty"`
+	IdleSleep     bool           `json:"idleSleep,omitempty"`
 }
 
 type LogLine struct {
@@ -147,6 +150,7 @@ func (m *Manager) refresh() {
 		return
 	}
 	meta := m.meta.AllMeta()
+	sleeps := m.meta.SleepRecs()
 	ip := "127.0.0.1"
 	if m.hostIP != nil {
 		ip = m.hostIP()
@@ -154,7 +158,10 @@ func (m *Manager) refresh() {
 	services := make([]Service, 0, len(list))
 	nextStats := map[string]sample{}
 	for _, c := range list {
-		svc, stat := m.inspect(ctx, c.ID, meta, ip)
+		if len(c.Names) > 0 && strings.HasSuffix(strings.TrimPrefix(c.Names[0], "/"), prevSuffix) {
+			continue
+		}
+		svc, stat := m.inspect(ctx, c.ID, meta, sleeps, ip)
 		services = append(services, svc)
 		if stat.at.Unix() != 0 {
 			nextStats[svc.ID] = stat
@@ -170,7 +177,9 @@ func (m *Manager) refresh() {
 	m.mu.Unlock()
 }
 
-func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.Meta, hostIP string) (Service, sample) {
+func (m *Manager) RefreshNow() { m.refresh() }
+
+func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) (Service, sample) {
 	info, err := m.cli.ContainerInspect(ctx, id)
 	if err != nil {
 		return Service{ID: id, Name: id, DisplayName: id, Kind: "container", Group: "未分组", Status: "exited", IconMatch: id}, sample{}
@@ -251,6 +260,10 @@ func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.
 		ExitCode:      exit,
 		LastError:     strings.TrimSpace(lastErr),
 		HideOnHome:    md.HideOnHome,
+		IdleSleep:     md.IdleSleep,
+	}
+	if rec, ok := sleeps[name]; ok {
+		applySleep(&svc, rec)
 	}
 	stat := m.stat(ctx, name, status)
 	svc.CPU = round1(stat.cpu)

@@ -15,6 +15,7 @@ import (
 	"github.com/xiaokaRepo/lumen/internal/imgupd"
 	"github.com/xiaokaRepo/lumen/internal/metrics"
 	"github.com/xiaokaRepo/lumen/internal/notify"
+	"github.com/xiaokaRepo/lumen/internal/sleepctl"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 	Docker  *dockermgr.Manager
 	History *metrics.History
 	Static  string
+	Sleep   *sleepctl.Ctl
 }
 
 func (s *Server) Handler() http.Handler {
@@ -244,12 +246,42 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
-	if err := s.Docker.Action(r.Context(), id, body.Action, body.RemoveVolumes); err != nil {
+	if err := s.runAction(r, id, body.Action, body.RemoveVolumes); err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.Docker.RefreshSoon()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) runAction(r *http.Request, id, action string, removeVolumes bool) error {
+	if s.Sleep == nil {
+		err := s.Docker.Action(r.Context(), id, action, removeVolumes)
+		if err == nil {
+			s.Docker.RefreshSoon()
+		}
+		return err
+	}
+	var err error
+	switch action {
+	case "sleep":
+		err = s.Sleep.Sleep(r.Context(), id)
+	case "wake":
+		err = s.Sleep.Wake(r.Context(), id)
+	case "start":
+		err = s.Sleep.Start(r.Context(), id)
+	case "stop":
+		err = s.Sleep.Stop(r.Context(), id)
+	case "restart":
+		err = s.Sleep.Restart(r.Context(), id)
+	case "remove":
+		err = s.Sleep.Remove(r.Context(), id, removeVolumes)
+	default:
+		err = s.Docker.Action(r.Context(), id, action, removeVolumes)
+		if err == nil {
+			s.Docker.RefreshSoon()
+		}
+	}
+	return err
 }
 
 func (s *Server) putMeta(w http.ResponseWriter, r *http.Request) {
@@ -280,10 +312,11 @@ func (s *Server) ports(w http.ResponseWriter, r *http.Request) {
 		ServiceID     string `json:"serviceId"`
 		ContainerPort int    `json:"containerPort,omitempty"`
 		Bound         bool   `json:"bound"`
+		Proxy         bool   `json:"proxy,omitempty"`
 	}
 	rows := []row{}
 	for _, svc := range services {
-		bound := svc.Status == "running" || svc.Status == "paused"
+		bound := (svc.Status == "running" || svc.Status == "paused") && !svc.Sleeping
 		for _, p := range svc.Ports {
 			rows = append(rows, row{
 				Port:          p.Host,
@@ -292,6 +325,7 @@ func (s *Server) ports(w http.ResponseWriter, r *http.Request) {
 				ServiceID:     svc.ID,
 				ContainerPort: p.Container,
 				Bound:         bound,
+				Proxy:         p.Proxy,
 			})
 		}
 	}
@@ -469,7 +503,13 @@ func (s *Server) stack(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "无法读取请求")
 		return
 	}
-	if err := s.Docker.StackAction(r.Context(), r.PathValue("id"), body.Action); err != nil {
+	var err error
+	if s.Sleep != nil {
+		err = s.Sleep.Stack(r.Context(), r.PathValue("id"), body.Action)
+	} else {
+		err = s.Docker.StackAction(r.Context(), r.PathValue("id"), body.Action)
+	}
+	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}

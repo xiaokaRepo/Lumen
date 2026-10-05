@@ -18,6 +18,7 @@ export interface ServiceMeta {
   description?: string
   iconOverride?: IconRef
   hideOnHome?: boolean
+  idleSleep?: boolean
 }
 
 interface Series {
@@ -206,6 +207,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           description: meta.description,
           iconOverride: meta.iconOverride,
           hideOnHome: meta.hideOnHome,
+          idleSleep: meta.idleSleep,
         }
         await api.saveMeta(id, body)
         await refresh()

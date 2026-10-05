@@ -47,6 +47,7 @@ export interface ServiceMetaBody {
   description?: string
   iconOverride?: IconRef
   hideOnHome?: boolean
+  idleSleep?: boolean
 }
 
 async function parse<T>(res: Response): Promise<T> {

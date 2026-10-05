@@ -12,6 +12,7 @@ export interface PortBinding {
   proto: Proto
   ip?: string
   web?: boolean
+  proxy?: boolean
 }
 
 export interface EnvVar {
@@ -61,6 +62,8 @@ export interface Service {
   exitCode?: number
   lastError?: string
   hideOnHome?: boolean
+  sleeping?: boolean
+  idleSleep?: boolean
 }
 
 export const HOST_IP = "192.168.31.20"
