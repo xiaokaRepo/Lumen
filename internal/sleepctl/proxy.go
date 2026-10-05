@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xiaokaRepo/lumen/internal/hoststat"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
 func listenAddr(rec store.SleepRec) string {
 	ip := rec.BindIP
-	if ip == "" || ip == "0.0.0.0" || ip == "::" {
+	if !hoststat.UsableBindIP(ip) {
 		ip = "0.0.0.0"
 	}
 	return net.JoinHostPort(ip, strconv.Itoa(rec.HostPort))

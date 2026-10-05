@@ -9,8 +9,14 @@ import {
   type ServiceMetaBody,
   type UpdateRow,
 } from "@/lib/api"
+import {
+  defaultLayout,
+  normalizeLayout,
+  type HomeLayout,
+} from "@/lib/home-layout"
 import type { SamplePoint } from "@/lib/live-sample"
 import type { IconRef } from "@/lib/icons"
+import { rememberOpenHost } from "@/lib/open-url"
 import { asList, normalizeServices, reconcileServices } from "@/lib/snapshot"
 import type { Service, ServiceStatus } from "@/mock/data"
 
@@ -52,8 +58,17 @@ interface Store {
   ) => Promise<void>
   homeOrder: string[]
   setHomeOrder: (ids: string[]) => void
+  homeLayout: HomeLayout
+  setHomeLayout: (layout: HomeLayout) => void
+  setLayoutHold: (hold: boolean) => void
   cardFields: CardFields
   setCardFields: (fields: CardFields) => void
+  username: string
+  updateAccount: (body: {
+    currentPassword: string
+    username: string
+    newPassword?: string
+  }) => Promise<void>
   updates: UpdateRow[]
   updateChecked: string
   updateError: string
@@ -95,13 +110,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     {}
   )
   const [homeOrder, setHomeOrderState] = React.useState<string[]>([])
+  const [homeLayout, setHomeLayoutState] =
+    React.useState<HomeLayout>(defaultLayout())
+  const [username, setUsername] = React.useState("admin")
   const [cardFields, setCardFieldsState] =
     React.useState<CardFields>(DEFAULT_CARD_FIELDS)
+  const holdLayout = React.useRef(false)
+  const layoutInflight = React.useRef(0)
+  const layoutGen = React.useRef(0)
+  const layoutQueue = React.useRef(Promise.resolve())
   const [updates, setUpdates] = React.useState<UpdateRow[]>([])
   const [updateChecked, setUpdateChecked] = React.useState("")
   const [updateError, setUpdateError] = React.useState("")
 
   const applyHost = React.useCallback((h: HostInfo) => {
+    rememberOpenHost(h)
     const next = {
       ...EMPTY_HOST,
       ...h,
@@ -150,6 +173,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return [...kept, ...added]
     })
     if (snap.cardFields) setCardFieldsState(snap.cardFields)
+    if (!holdLayout.current && layoutInflight.current === 0) {
+      setHomeLayoutState(normalizeLayout(snap.homeLayout))
+    }
     setOnLan(snap.onLan !== false)
   }, [applyHost])
 
@@ -170,6 +196,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (stop) return
         setSetupRequired(s.setupRequired)
         setAuthed(s.authed)
+        if (s.username) setUsername(s.username)
         applyHost(s.host)
         if (s.authed) {
           await refresh()
@@ -221,12 +248,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dockerError,
       systemdNote,
       homeOrder,
+      homeLayout,
+      username,
       updates,
       updateChecked,
       updateError,
       setHomeOrder: (ids) => {
         setHomeOrderState(ids)
         void api.saveHome(ids)
+      },
+      setHomeLayout: (layout) => {
+        const next = normalizeLayout(layout)
+        const mine = ++layoutGen.current
+        layoutInflight.current++
+        setHomeLayoutState(next)
+        layoutQueue.current = layoutQueue.current.then(async () => {
+          if (mine !== layoutGen.current) {
+            layoutInflight.current--
+            return
+          }
+          try {
+            await api.saveHomeLayout(next)
+          } finally {
+            layoutInflight.current--
+          }
+        })
+      },
+      setLayoutHold: (hold) => {
+        holdLayout.current = hold
       },
       cardFields,
       setCardFields: (fields) => {
@@ -245,6 +294,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setUpdateError(d.error || "")
       },
       refresh,
+      updateAccount: async (body) => {
+        const res = await api.updateAccount(body)
+        setUsername(res.username || body.username)
+      },
       updateMeta: async (id, meta) => {
         const body: ServiceMetaBody = {
           displayName: meta.displayName,
@@ -267,6 +320,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await api.login(password, remember)
         setAuthed(true)
         setSetupRequired(false)
+        const s = await api.session()
+        if (s.username) setUsername(s.username)
         await refresh()
       },
       setup: async (password) => {
@@ -305,6 +360,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dockerError,
       systemdNote,
       homeOrder,
+      homeLayout,
+      username,
       cardFields,
       updates,
       updateChecked,

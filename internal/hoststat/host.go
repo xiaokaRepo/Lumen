@@ -206,20 +206,26 @@ func diskUsage(parts []disk.PartitionStat) []Disk {
 }
 
 func pickIface(ifaces []gnet.InterfaceStat) (ip, label string) {
+	bestRank := 0
+	var bestIP, bestName string
 	for _, ifc := range ifaces {
-		if ifc.Name == "lo" {
+		if virtualIface(ifc.Name) {
 			continue
 		}
 		for _, a := range ifc.Addrs {
-			ip = stripCIDR(a.Addr)
-			if ip == "" || ip == "127.0.0.1" || contains(ip, ':') {
-				ip = ""
+			ip := stripCIDR(a.Addr)
+			if !usableIPv4(ip) {
 				continue
 			}
-			return ip, ifc.Name
+			rank := lanRank(ip)
+			if rank > bestRank {
+				bestRank = rank
+				bestIP = ip
+				bestName = ifc.Name
+			}
 		}
 	}
-	return "127.0.0.1", "lo"
+	return bestIP, bestName
 }
 
 func stripCIDR(s string) string {
@@ -229,15 +235,6 @@ func stripCIDR(s string) string {
 		}
 	}
 	return s
-}
-
-func contains(s string, c byte) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return true
-		}
-	}
-	return false
 }
 
 func hostname(info *host.InfoStat) string {

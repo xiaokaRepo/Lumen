@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 
+	"github.com/xiaokaRepo/lumen/internal/hoststat"
 	"github.com/xiaokaRepo/lumen/internal/store"
 )
 
@@ -187,6 +188,7 @@ func (m *Manager) refresh() {
 			svc = keepOrSummary(c, known, meta, sleeps, ip)
 			stat = sample{}
 		}
+		svc = finishWeb(svc, ip)
 		services = append(services, svc)
 		if stat.at.Unix() != 0 {
 			nextStats[svc.ID] = stat
@@ -327,6 +329,16 @@ func serviceFromSummary(c types.Container, meta map[string]store.Meta, sleeps ma
 	}
 	if rec, ok := sleeps[name]; ok {
 		applySleep(&svc, rec)
+	}
+	return svc
+}
+
+func finishWeb(svc Service, open string) Service {
+	svc.WebURL = hoststat.RewriteWeb(svc.WebURL, open)
+	for i := range svc.Ports {
+		if hoststat.DockerHost(svc.Ports[i].IP) {
+			svc.Ports[i].IP = "0.0.0.0"
+		}
 	}
 	return svc
 }
