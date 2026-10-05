@@ -184,7 +184,7 @@ func (m *Manager) RefreshNow() { m.refresh() }
 func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.Meta, sleeps map[string]store.SleepRec, hostIP string) (Service, sample) {
 	info, err := m.cli.ContainerInspect(ctx, id)
 	if err != nil {
-		return Service{ID: id, Name: id, DisplayName: id, Kind: "container", Group: "未分组", Status: "exited", IconMatch: id}, sample{}
+		return Service{ID: id, Name: id, DisplayName: id, Kind: "container", Group: "未分组", Status: "exited", IconMatch: id, Ports: []PortBinding{}}, sample{}
 	}
 	name := strings.TrimPrefix(info.Name, "/")
 	md := meta[name]

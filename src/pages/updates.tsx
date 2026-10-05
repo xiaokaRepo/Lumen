@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { UpdateRow } from "@/lib/api"
+import { asList } from "@/lib/snapshot"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -47,7 +48,7 @@ function UpdateDialog({
   onClose: () => void
 }) {
   const { services } = useStore()
-  const names = row?.serviceIds
+  const names = asList(row?.serviceIds)
     .map((id) => services.find((s) => s.id === id)?.displayName)
     .filter(Boolean)
     .join("、")
@@ -135,9 +136,9 @@ export function UpdatesPage() {
       {state === "ready" && (
         <div className="flex flex-col gap-3">
           {updates.map((u) => {
-            const list = u.serviceIds
-              .map((id) => services.find((s) => s.id === id)!)
-              .filter(Boolean)
+            const list = asList(u.serviceIds)
+              .map((id) => services.find((s) => s.id === id))
+              .filter((s) => s != null)
             const first = list[0]
             return (
               <div
@@ -149,21 +150,25 @@ export function UpdatesPage() {
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <ServiceIcon
-                    match={first.iconMatch}
-                    override={first.iconOverride}
-                    kind={first.kind}
+                    match={first?.iconMatch || u.image}
+                    override={first?.iconOverride}
+                    kind={first?.kind}
                     size="lg"
                   />
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="flex flex-wrap items-center gap-2">
-                      <Link
-                        to={`/services/${first.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {u.stack
-                          ? list.map((s) => s.displayName).join("、")
-                          : first.displayName}
-                      </Link>
+                      {first ? (
+                        <Link
+                          to={`/services/${first.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {u.stack
+                            ? list.map((s) => s.displayName).join("、")
+                            : first.displayName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{u.image}</span>
+                      )}
                       {u.stack && (
                         <Badge variant="outline" className="gap-1">
                           <IconStack2 />
