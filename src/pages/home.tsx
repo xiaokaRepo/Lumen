@@ -5,6 +5,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
@@ -559,13 +560,22 @@ export function HomePage() {
   const onDragEnd = (e: DragEndEvent) => {
     let next = draftRef.current
     if (e.over) {
-      const moved = reorderCard(
+      const across = moveCard(
         next,
         dockerRef.current,
         String(e.active.id),
         String(e.over.id)
       )
-      if (moved) next = moved
+      if (across) next = across
+      else {
+        const moved = reorderCard(
+          next,
+          dockerRef.current,
+          String(e.active.id),
+          String(e.over.id)
+        )
+        if (moved) next = moved
+      }
     }
     applyDraft(next, true)
   }
@@ -776,7 +786,10 @@ export function HomePage() {
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={(args) => {
+            const hits = pointerWithin(args)
+            return hits.length ? hits : closestCorners(args)
+          }}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
         >
