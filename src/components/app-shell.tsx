@@ -21,6 +21,7 @@ import {
   IconNetwork,
   IconPlug,
   IconSearch,
+  IconServer,
   IconSettings,
   IconStack2,
   IconSun,
@@ -75,6 +76,7 @@ const NAV = [
     items: [
       { to: "/home", label: "主页", icon: IconAppWindow },
       { to: "/", label: "概览", icon: IconLayoutDashboard, end: true },
+      { to: "/hosts", label: "主机", icon: IconServer },
       { to: "/services", label: "服务", icon: IconStack2 },
       {
         to: "/updates",
@@ -110,6 +112,7 @@ const NAV = [
 const TITLES: Record<string, string> = {
   "": "概览",
   home: "主页",
+  hosts: "主机",
   services: "服务",
   updates: "镜像更新",
   ports: "端口",

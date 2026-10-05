@@ -242,7 +242,7 @@ export function ServicesPage() {
       </div>
 
       {state === "loading" && <TableSkeleton rows={10} cols={6} />}
-      {state === "error" && <ErrorState />}
+      {state === "error" && <ErrorState message={error} />}
       {(state === "empty" || (state === "ready" && groups.length === 0)) && (
         <EmptyState
           icon={<IconStack2 />}

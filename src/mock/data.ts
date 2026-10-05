@@ -44,6 +44,7 @@ export interface Service {
   iconOverride?: IconRef
   ports: PortBinding[]
   webUrl?: string
+  remoteUrl?: string
   cpu: number
   memMB: number
   memLimitMB?: number

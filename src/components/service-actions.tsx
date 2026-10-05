@@ -35,13 +35,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { serviceOpenURL } from "@/lib/open-url"
 import { useStore } from "@/lib/store"
 import type { Service } from "@/mock/data"
 
 type Confirm = "stop" | "remove" | null
 
 export function useServiceActions(s: Service) {
-  const { flashStatus, act, updates } = useStore()
+  const { flashStatus, act, updates, onLan } = useStore()
+  const openURL = serviceOpenURL(s, onLan)
   const [confirm, setConfirm] = React.useState<Confirm>(null)
   const [edit, setEdit] = React.useState(false)
   const [removeVolumes, setRemoveVolumes] = React.useState(false)
@@ -168,6 +170,7 @@ export function useServiceActions(s: Service) {
     dialogs,
     isNative,
     upd,
+    openURL,
   }
 }
 
@@ -231,7 +234,7 @@ export function ServiceActionsMenu({
   align?: "end" | "start"
   trigger?: React.ReactNode
 }) {
-  const { run, restart, setConfirm, setEdit, dialogs, isNative, upd } =
+  const { run, restart, setConfirm, setEdit, dialogs, isNative, upd, openURL } =
     useServiceActions(s)
   const running = s.status === "running"
   return (
@@ -249,9 +252,9 @@ export function ServiceActionsMenu({
           className="w-44"
           onClick={(e) => e.stopPropagation()}
         >
-          {s.webUrl && (
+          {openURL && (
             <DropdownMenuItem asChild>
-              <a href={s.webUrl} target="_blank" rel="noreferrer">
+              <a href={openURL} target="_blank" rel="noreferrer">
                 <IconExternalLink />
                 打开 Web UI
               </a>

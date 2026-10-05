@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip"
 import type { CardFields } from "@/lib/api"
 import { groupNames } from "@/lib/ports"
+import { serviceOpenURL } from "@/lib/open-url"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { GROUPS, type Service } from "@/mock/data"
@@ -64,6 +65,7 @@ function Tile({
   editing,
   fields,
   hasUpdate,
+  onLan,
   onEdit,
   onToggleHide,
   index,
@@ -73,6 +75,7 @@ function Tile({
   editing: boolean
   fields: CardFields
   hasUpdate: boolean
+  onLan: boolean
   onEdit: () => void
   onToggleHide: () => void
   index: number
@@ -87,7 +90,8 @@ function Tile({
     isDragging,
   } = useSortable({ id: s.id, disabled: !editing })
   const tone = cardTone(s)
-  const hostLabel = s.webUrl?.replace(/^https?:\/\//, "")
+  const openURL = serviceOpenURL(s, onLan)
+  const hostLabel = openURL?.replace(/^https?:\/\//, "")
   const duration = s.sleeping
     ? `休眠 ${s.sleepFor || "刚刚"}`
     : s.uptime
@@ -220,7 +224,7 @@ function Tile({
           </div>
         ) : (
           <a
-            href={s.webUrl}
+            href={openURL}
             target="_blank"
             rel="noreferrer"
             className="group flex items-center gap-3 rounded-xl border bg-card p-3 transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:border-foreground/20 hover:bg-muted/50 hover:shadow-md hover:shadow-foreground/5 active:translate-y-px active:scale-[0.98]"
@@ -243,6 +247,7 @@ export function HomePage() {
     updates,
     updateMeta,
     host,
+    onLan,
   } = useStore()
   const enter = useEnterOnce("home")
   const [editing, setEditing] = React.useState(false)
@@ -255,7 +260,7 @@ export function HomePage() {
   )
 
   const byOrder = [...services]
-    .filter((s) => s.webUrl)
+    .filter((s) => serviceOpenURL(s, onLan))
     .sort((a, b) => homeOrder.indexOf(a.id) - homeOrder.indexOf(b.id))
   const visible = byOrder.filter(
     (s) =>
@@ -304,8 +309,8 @@ export function HomePage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && visible[0]?.webUrl)
-                window.open(visible[0].webUrl, "_blank")
+              if (e.key === "Enter" && visible[0] && serviceOpenURL(visible[0], onLan))
+                window.open(serviceOpenURL(visible[0], onLan), "_blank")
             }}
           />
           <InputGroupAddon align="inline-end">
@@ -443,6 +448,7 @@ export function HomePage() {
                         hasUpdate={updates.some((u) =>
                           u.serviceIds.includes(s.id)
                         )}
+                        onLan={onLan}
                         index={visible.indexOf(s)}
                         enter={enter && !q}
                         onEdit={() => setEditTarget(s)}

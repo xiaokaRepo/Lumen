@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { StoreProvider, useStore } from "@/lib/store"
 import { AlertsPage } from "@/pages/alerts"
 import { HomePage } from "@/pages/home"
+import { HostsPage } from "@/pages/hosts"
 import { LoginPage } from "@/pages/login"
 import { OverviewPage } from "@/pages/overview"
 import { PortsPage } from "@/pages/ports"
@@ -45,6 +46,7 @@ export function App() {
                 <Route element={<AppShell />}>
                   <Route index element={<OverviewPage />} />
                   <Route path="home" element={<HomePage />} />
+                  <Route path="hosts" element={<HostsPage />} />
                   <Route path="services" element={<ServicesPage />} />
                   <Route path="services/:id" element={<ServiceDetailPage />} />
                   <Route path="updates" element={<UpdatesPage />} />

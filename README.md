@@ -2,7 +2,7 @@
 
 Docker, process and service management panel for a UGREEN DXP4800 NAS.
 
-The panel is one Go process. It discovers containers, reads host processes, compose projects, images, networks, volumes, and metric history, and signs in with one password. Alerts go out through Bark, Telegram, or WeCom. Image checks compare registry digests and only notify.
+The panel signs in with one password and only lists services, sends actions, and shows status. Each machine runs `lumen-agent` (its own image), which talks to local Docker, processes, disk, and the sleep proxy on that machine. See [docs/agent.md](docs/agent.md). Alerts go out through Bark, Telegram, or WeCom. Image checks compare registry digests and only notify.
 
 - Stack: React 19, Vite 8, Tailwind v4, shadcn/ui (preset `bYAK`: radix-nova, neutral, Tabler icons, Inter), Recharts, dnd-kit, react-router.
 - Design rules: `taste-skill` v2 (`.agents/skills/design-taste-frontend`), installed with `npx skills add Leonxlnx/taste-skill`.
@@ -10,8 +10,11 @@ The panel is one Go process. It discovers containers, reads host processes, comp
 ## Run
 
 ```bash
-# API on :7878, talks to the local Docker socket
-go run ./cmd/lumen
+# Agent on the machine that has Docker. The token is shared with the panel.
+LUMEN_AGENT_TOKEN=change-me LUMEN_ADDR=:7879 go run ./cmd/lumen-agent
+
+# Panel on :7878. Add the agent under 主机.
+LUMEN_ADDR=:7878 go run ./cmd/lumen
 
 # UI dev server proxies /api to :7878
 npm install

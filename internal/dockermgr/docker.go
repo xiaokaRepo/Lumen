@@ -56,6 +56,7 @@ type Service struct {
 	IconOverride  *store.IconRef `json:"iconOverride,omitempty"`
 	Ports         []PortBinding  `json:"ports"`
 	WebURL        string         `json:"webUrl,omitempty"`
+	RemoteURL     string         `json:"remoteUrl,omitempty"`
 	CPU           float64        `json:"cpu"`
 	MemMB         float64        `json:"memMB"`
 	MemLimitMB    float64        `json:"memLimitMB,omitempty"`
@@ -251,6 +252,7 @@ func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.
 		IconOverride:  md.IconOverride,
 		Ports:         ports,
 		WebURL:        web,
+		RemoteURL:     md.RemoteURL,
 		Uptime:        uptimeOf(info.State),
 		RestartPolicy: string(info.HostConfig.RestartPolicy.Name),
 		NetworkMode:   string(info.HostConfig.NetworkMode),

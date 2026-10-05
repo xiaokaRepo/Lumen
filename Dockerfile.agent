@@ -1,0 +1,15 @@
+FROM golang:1.26-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -o /out/lumen-agent ./cmd/lumen-agent
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/lumen-agent /usr/local/bin/lumen-agent
+ENV LUMEN_DATA=/data LUMEN_ADDR=:7879
+VOLUME /data
+EXPOSE 7879
+ENTRYPOINT ["lumen-agent"]

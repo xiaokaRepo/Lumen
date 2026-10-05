@@ -17,6 +17,7 @@ export interface ServiceMeta {
   displayName?: string
   group?: string
   webUrl?: string
+  remoteUrl?: string
   description?: string
   iconOverride?: IconRef
   hideOnHome?: boolean
@@ -37,6 +38,7 @@ interface Store {
   setupRequired: boolean
   authed: boolean
   host: HostInfo
+  onLan: boolean
   services: Service[]
   series: Series
   dockerError: string
@@ -83,6 +85,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [setupRequired, setSetupRequired] = React.useState(false)
   const [authed, setAuthed] = React.useState(false)
   const [host, setHost] = React.useState<HostInfo>(EMPTY_HOST)
+  const [onLan, setOnLan] = React.useState(true)
   const [services, setServices] = React.useState<Service[]>([])
   const [series, setSeries] = React.useState<Series>(emptySeries)
   const [dockerError, setDockerError] = React.useState("")
@@ -98,18 +101,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [updateError, setUpdateError] = React.useState("")
 
   const applyHost = React.useCallback((h: HostInfo) => {
-    setHost(h)
-    const disk = h.disks[0]
+    const next = {
+      ...EMPTY_HOST,
+      ...h,
+      disks: h?.disks ?? [],
+      load: h?.load?.length ? h.load : [0, 0, 0],
+    }
+    setHost(next)
+    const disk = next.disks[0]
     const diskPct =
       disk && disk.totalGB ? (disk.usedGB / disk.totalGB) * 100 : 0
     setSeries((prev) => ({
-      cpu: push(prev.cpu, h.cpuPercent),
+      cpu: push(prev.cpu, next.cpuPercent),
       mem: push(
         prev.mem,
-        h.memTotalGB ? (h.memUsedGB / h.memTotalGB) * 100 : 0
+        next.memTotalGB ? (next.memUsedGB / next.memTotalGB) * 100 : 0
       ),
-      rx: push(prev.rx, h.netRxMBs),
-      tx: push(prev.tx, h.netTxMBs),
+      rx: push(prev.rx, next.netRxMBs),
+      tx: push(prev.tx, next.netTxMBs),
       disk: push(prev.disk, diskPct),
     }))
   }, [])
@@ -130,6 +139,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return [...kept, ...added]
     })
     if (snap.cardFields) setCardFieldsState(snap.cardFields)
+    setOnLan(snap.onLan !== false)
   }, [applyHost])
 
   const loadUpdates = React.useCallback(async () => {
@@ -187,6 +197,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setupRequired,
       authed,
       host,
+      onLan,
       services: shown,
       series,
       dockerError,
@@ -216,6 +227,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           displayName: meta.displayName,
           group: meta.group,
           webUrl: meta.webUrl,
+          remoteUrl: meta.remoteUrl,
           description: meta.description,
           iconOverride: meta.iconOverride,
           hideOnHome: meta.hideOnHome,
@@ -264,6 +276,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setupRequired,
       authed,
       host,
+      onLan,
       shown,
       series,
       dockerError,

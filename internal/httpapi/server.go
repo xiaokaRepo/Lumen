@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xiaokaRepo/lumen/internal/agentlink"
 	"github.com/xiaokaRepo/lumen/internal/dockermgr"
 	"github.com/xiaokaRepo/lumen/internal/hoststat"
 	"github.com/xiaokaRepo/lumen/internal/imgupd"
@@ -26,6 +27,9 @@ type Server struct {
 	History *metrics.History
 	Static  string
 	Sleep   *sleepctl.Ctl
+	// Fleet is set on the panel. Machine routes are then sent to lumen-agent.
+	Fleet *Fleet
+	Hub   *agentlink.Hub
 }
 
 func (s *Server) Handler() http.Handler {
@@ -35,33 +39,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/logout", s.logout)
 	mux.HandleFunc("GET /api/snapshot", s.authed(s.snapshot))
-	mux.HandleFunc("GET /api/services/{id}/logs", s.authed(s.logs))
-	mux.HandleFunc("POST /api/services/{id}/action", s.authed(s.action))
-	mux.HandleFunc("PUT /api/services/{id}", s.authed(s.putMeta))
-	mux.HandleFunc("GET /api/ports", s.authed(s.ports))
-	mux.HandleFunc("GET /api/processes", s.authed(s.processes))
-	mux.HandleFunc("POST /api/processes/{pid}/signal", s.authed(s.signal))
-	mux.HandleFunc("POST /api/processes/{pid}/nice", s.authed(s.renice))
-	mux.HandleFunc("GET /api/systemd", s.authed(s.systemd))
-	mux.HandleFunc("GET /api/metrics", s.authed(s.metrics))
-	mux.HandleFunc("GET /api/images", s.authed(s.images))
-	mux.HandleFunc("POST /api/images/pull", s.authed(s.pullImage))
-	mux.HandleFunc("POST /api/images/prune", s.authed(s.pruneImages))
-	mux.HandleFunc("DELETE /api/images/{id}", s.authed(s.deleteImage))
-	mux.HandleFunc("GET /api/networks", s.authed(s.networks))
-	mux.HandleFunc("POST /api/networks", s.authed(s.createNetwork))
-	mux.HandleFunc("DELETE /api/networks/{id}", s.authed(s.deleteNetwork))
-	mux.HandleFunc("GET /api/volumes", s.authed(s.volumes))
-	mux.HandleFunc("POST /api/volumes/prune", s.authed(s.pruneVolumes))
-	mux.HandleFunc("DELETE /api/volumes/{id}", s.authed(s.deleteVolume))
-	mux.HandleFunc("POST /api/stacks/{id}/action", s.authed(s.stack))
+	s.mountOps(mux, s.machine)
+	mux.HandleFunc("GET /api/hosts", s.authed(s.listHosts))
+	mux.HandleFunc("POST /api/hosts", s.authed(s.putHost))
+	mux.HandleFunc("DELETE /api/hosts/{id}", s.authed(s.deleteHost))
+	mux.HandleFunc("POST /api/hosts/{id}/active", s.authed(s.activateHost))
+	mux.HandleFunc("POST /api/agent/wait", s.agentWait)
+	mux.HandleFunc("POST /api/agent/result", s.agentResult)
 	mux.HandleFunc("GET /api/alerts", s.authed(s.alerts))
 	mux.HandleFunc("PUT /api/channels", s.authed(s.putChannel))
 	mux.HandleFunc("DELETE /api/channels/{id}", s.authed(s.deleteChannel))
 	mux.HandleFunc("POST /api/channels/{id}/test", s.authed(s.testChannel))
 	mux.HandleFunc("PUT /api/rules", s.authed(s.putRule))
-	mux.HandleFunc("GET /api/updates", s.authed(s.updates))
-	mux.HandleFunc("POST /api/updates/check", s.authed(s.checkUpdates))
 	mux.HandleFunc("PUT /api/home", s.authed(s.putHome))
 	if s.Static != "" {
 		mux.Handle("/", s.spa())
@@ -70,11 +59,23 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) session(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	var host any
+	if s.Fleet != nil {
+		host = s.Fleet.LastHost()
+	} else if s.Host != nil {
+		host = s.Host.Current()
+	} else {
+		host = hoststat.Snapshot{Load: []float64{0, 0, 0}, Disks: []hoststat.Disk{}}
+	}
+	body := map[string]any{
 		"setupRequired": s.Store.SetupRequired(),
 		"authed":        s.Store.Valid(cookieToken(r)),
-		"host":          s.Host.Current(),
-	})
+		"host":          host,
+	}
+	if ag, ok := s.Store.ActiveAgent(); ok {
+		body["agentName"] = ag.Name
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +141,10 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
+	if s.Fleet != nil {
+		s.snapshotRemote(w, r)
+		return
+	}
 	services, errText := s.Docker.Services()
 	out := make([]any, 0, len(services)+8)
 	for _, svc := range services {
@@ -645,6 +650,16 @@ func atoi(s string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+func (s *Server) machine(next http.HandlerFunc) http.HandlerFunc {
+	return s.authed(func(w http.ResponseWriter, r *http.Request) {
+		if s.Fleet != nil {
+			s.proxy(w, r)
+			return
+		}
+		next(w, r)
+	})
 }
 
 func (s *Server) authed(next http.HandlerFunc) http.HandlerFunc {
