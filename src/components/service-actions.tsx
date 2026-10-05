@@ -33,17 +33,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { useStore } from "@/lib/store"
 import { updateFor } from "@/mock/alerts"
 import type { Service } from "@/mock/data"
 
 type Confirm = "stop" | "remove" | null
 
 export function useServiceActions(s: Service) {
+  const { flashStatus } = useStore()
   const [confirm, setConfirm] = React.useState<Confirm>(null)
   const [edit, setEdit] = React.useState(false)
   const [removeVolumes, setRemoveVolumes] = React.useState(false)
+  const [restarting, setRestarting] = React.useState(false)
   const isNative = s.kind === "systemd" || s.kind === "process"
   const upd = updateFor(s.id)
+
+  const restart = () => {
+    if (restarting) return
+    setRestarting(true)
+    flashStatus(s.id, "restarting")
+    window.setTimeout(() => setRestarting(false), 360)
+    run("重启")
+  }
 
   const run = (label: string) =>
     toast.success(`${label}：${s.displayName}`, {
@@ -109,7 +120,67 @@ export function useServiceActions(s: Service) {
     </>
   )
 
-  return { run, setConfirm, setEdit, dialogs, isNative, upd }
+  return {
+    run,
+    restart,
+    restarting,
+    setConfirm,
+    setEdit,
+    dialogs,
+    isNative,
+    upd,
+  }
+}
+
+export function RestartButton({
+  busy,
+  onClick,
+  className,
+}: {
+  busy: boolean
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <Button
+      variant="outline"
+      className={className}
+      onClick={onClick}
+      disabled={busy}
+    >
+      <span className="relative inline-flex size-3.5 items-center justify-center">
+        {busy ? (
+          <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+            <circle
+              cx="8"
+              cy="8"
+              r="6"
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.25"
+              strokeWidth="1.5"
+            />
+            <circle
+              cx="8"
+              cy="8"
+              r="6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeDasharray="37.7"
+              strokeDashoffset="37.7"
+              transform="rotate(-90 8 8)"
+              className="lumen-ring"
+            />
+          </svg>
+        ) : (
+          <IconRefresh data-icon="inline-start" />
+        )}
+      </span>
+      重启
+    </Button>
+  )
 }
 
 export function ServiceActionsMenu({
@@ -121,7 +192,7 @@ export function ServiceActionsMenu({
   align?: "end" | "start"
   trigger?: React.ReactNode
 }) {
-  const { run, setConfirm, setEdit, dialogs, isNative, upd } =
+  const { run, restart, setConfirm, setEdit, dialogs, isNative, upd } =
     useServiceActions(s)
   const running = s.status === "running"
   return (
@@ -165,7 +236,7 @@ export function ServiceActionsMenu({
               {s.status === "paused" ? "恢复" : "启动"}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => run("重启")}>
+          <DropdownMenuItem onSelect={() => restart()}>
             <IconRefresh />
             重启
           </DropdownMenuItem>

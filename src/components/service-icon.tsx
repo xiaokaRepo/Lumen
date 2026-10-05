@@ -1,5 +1,6 @@
 import * as React from "react"
 import { IconBox, IconServer2, IconTerminal2 } from "@tabler/icons-react"
+import { motion } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import { resolveIconChain, type IconRef } from "@/lib/icons"
@@ -18,12 +19,14 @@ export function ServiceIcon({
   kind = "container",
   size = "md",
   className,
+  layoutId,
 }: {
   match: string
   override?: IconRef
   kind?: ServiceKind
   size?: keyof typeof SIZES
   className?: string
+  layoutId?: string
 }) {
   const chain = React.useMemo(
     () => resolveIconChain(match, override),
@@ -45,25 +48,32 @@ export function ServiceIcon({
         ? IconTerminal2
         : IconBox
 
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center bg-muted ring-1 ring-foreground/5",
-        SIZES[size],
-        className
-      )}
-    >
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          className="size-full object-contain"
-          onError={() => setIdx((i) => i + 1)}
-        />
-      ) : (
-        <Fallback className="size-full text-muted-foreground" stroke={1.5} />
-      )}
-    </span>
+  const inner = src ? (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      className="size-full object-contain"
+      onError={() => setIdx((i) => i + 1)}
+    />
+  ) : (
+    <Fallback className="size-full text-muted-foreground" stroke={1.5} />
   )
+  const cls = cn(
+    "inline-flex shrink-0 items-center justify-center bg-muted ring-1 ring-foreground/5",
+    SIZES[size],
+    className
+  )
+  if (layoutId) {
+    return (
+      <motion.span
+        layoutId={layoutId}
+        transition={{ layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
+        className={cls}
+      >
+        {inner}
+      </motion.span>
+    )
+  }
+  return <span className={cls}>{inner}</span>
 }

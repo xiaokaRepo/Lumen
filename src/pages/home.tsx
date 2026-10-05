@@ -17,6 +17,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { motion } from "motion/react"
 import {
   IconCheck,
   IconEye,
@@ -28,6 +29,8 @@ import {
 } from "@tabler/icons-react"
 
 import { EditServiceSheet } from "@/components/edit-service-sheet"
+import { EnterBlock, useEnterOnce } from "@/components/enter"
+import { NumberRoll } from "@/components/number-roll"
 import { EmptyState } from "@/components/page-states"
 import { ServiceIcon } from "@/components/service-icon"
 import { Button } from "@/components/ui/button"
@@ -42,6 +45,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useLiveSample } from "@/lib/live-sample"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { GROUPS, host, type Service } from "@/mock/data"
@@ -58,11 +62,15 @@ function Tile({
   editing,
   onEdit,
   onToggleHide,
+  index,
+  enter,
 }: {
   s: Service
   editing: boolean
   onEdit: () => void
   onToggleHide: () => void
+  index: number
+  enter: boolean
 }) {
   const {
     attributes,
@@ -82,10 +90,19 @@ function Tile({
         override={s.iconOverride}
         kind={s.kind}
         size="lg"
-        className={cn(down && !editing && "opacity-60 grayscale")}
+        layoutId={editing ? undefined : `icon-${s.id}`}
+        className={cn(
+          "transition-transform duration-200 ease-out group-hover:scale-105",
+          down && !editing && "opacity-60 grayscale"
+        )}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate font-medium">{s.displayName}</span>
+        <motion.span
+          layoutId={editing ? undefined : `name-${s.id}`}
+          className="truncate font-medium"
+        >
+          {s.displayName}
+        </motion.span>
         {s.description && !editing ? (
           <span className="truncate text-xs text-muted-foreground">
             {s.description}
@@ -98,7 +115,7 @@ function Tile({
         {down && (
           <span className="flex items-center gap-1.5 text-xs text-destructive">
             <span
-              className="size-1.5 rounded-full bg-destructive"
+              className="lumen-pulse-once size-1.5 rounded-full bg-destructive"
               aria-hidden
             />
             {s.health === "unhealthy" && s.status === "running"
@@ -110,68 +127,81 @@ function Tile({
     </>
   )
 
+  const dragTransform = CSS.Transform.toString(transform)
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        transform: dragTransform,
+        transition: isDragging
+          ? undefined
+          : transition
+            ? "transform 280ms cubic-bezier(0.22, 1.2, 0.36, 1)"
+            : undefined,
+        zIndex: isDragging ? 20 : undefined,
+      }}
       className={cn(
         "relative",
-        isDragging && "z-10",
+        isDragging && "z-10 -translate-y-0.5 scale-[1.02]",
         s.hideOnHome && editing && "opacity-50"
       )}
     >
-      {editing ? (
-        <div
-          className={cn(
-            "flex items-center gap-3 rounded-xl border border-dashed bg-card p-3 pr-2",
-            isDragging &&
-              "border-solid border-foreground/40 shadow-lg shadow-foreground/5"
-          )}
-        >
-          <button
-            {...attributes}
-            {...listeners}
-            className="-ml-1 cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
-            aria-label={`拖动 ${s.displayName}`}
+      <EnterBlock show={enter} index={index} className="h-full">
+        {editing ? (
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-xl border border-dashed bg-card p-3 pr-2 transition-shadow duration-200 ease-out",
+              isDragging &&
+                "border-solid border-foreground/30 shadow-lg shadow-foreground/10"
+            )}
           >
-            <IconGripVertical className="size-4" />
-          </button>
-          {body}
-          <span className="flex flex-col">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onToggleHide}
-              aria-label={s.hideOnHome ? "显示" : "隐藏"}
+            <button
+              {...attributes}
+              {...listeners}
+              className="-ml-1 cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+              aria-label={`拖动 ${s.displayName}`}
             >
-              {s.hideOnHome ? <IconEyeOff /> : <IconEye />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onEdit}
-              aria-label="编辑"
-            >
-              <IconPencil />
-            </Button>
-          </span>
-        </div>
-      ) : (
-        <a
-          href={s.webUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-3 rounded-xl border bg-card p-3 transition-[background-color,border-color,transform] hover:border-foreground/20 hover:bg-muted/50 active:scale-[0.98]"
-        >
-          {body}
-        </a>
-      )}
+              <IconGripVertical className="size-4" />
+            </button>
+            {body}
+            <span className="flex flex-col">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onToggleHide}
+                aria-label={s.hideOnHome ? "显示" : "隐藏"}
+              >
+                {s.hideOnHome ? <IconEyeOff /> : <IconEye />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onEdit}
+                aria-label="编辑"
+              >
+                <IconPencil />
+              </Button>
+            </span>
+          </div>
+        ) : (
+          <a
+            href={s.webUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="group flex items-center gap-3 rounded-xl border bg-card p-3 transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:border-foreground/20 hover:bg-muted/50 hover:shadow-md hover:shadow-foreground/5 active:translate-y-px active:scale-[0.98]"
+          >
+            {body}
+          </a>
+        )}
+      </EnterBlock>
     </div>
   )
 }
 
 export function HomePage() {
   const { services, homeOrder, setHomeOrder, updateMeta } = useStore()
+  const live = useLiveSample()
+  const enter = useEnterOnce("home")
   const [editing, setEditing] = React.useState(false)
   const [q, setQ] = React.useState("")
   const [editTarget, setEditTarget] = React.useState<Service | null>(null)
@@ -241,16 +271,22 @@ export function HomePage() {
         </InputGroup>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
           <span>
-            <span className="tabular text-foreground">{running}</span> /{" "}
-            {byOrder.length} 个应用正常
+            <span className="text-foreground">
+              <NumberRoll value={running} digits={0} />
+            </span>{" "}
+            / {byOrder.length} 个应用正常
           </span>
           <span>
             CPU{" "}
-            <span className="tabular text-foreground">{host.cpuPercent}%</span>
+            <span className="text-foreground">
+              <NumberRoll value={live.cpu} suffix="%" />
+            </span>
           </span>
           <span>
             内存{" "}
-            <span className="tabular text-foreground">{host.memUsedGB} GB</span>
+            <span className="text-foreground">
+              <NumberRoll value={live.memGB} suffix=" GB" />
+            </span>
           </span>
           <span>
             {host.disks[0].mount} 剩余{" "}
@@ -331,6 +367,8 @@ export function HomePage() {
                         key={s.id}
                         s={s}
                         editing={editing}
+                        index={visible.indexOf(s)}
+                        enter={enter && !q}
                         onEdit={() => setEditTarget(s)}
                         onToggleHide={() =>
                           updateMeta(s.id, { hideOnHome: !s.hideOnHome })
