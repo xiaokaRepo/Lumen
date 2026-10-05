@@ -10,7 +10,10 @@ import {
   IconRotateClockwise,
 } from "@tabler/icons-react"
 
+import { motion } from "motion/react"
+
 import { MetricChart, Sparkline } from "@/components/metric-chart"
+import { NumberRoll } from "@/components/number-roll"
 import { ErrorState, PageHeader, useViewState } from "@/components/page-states"
 import { ServiceIcon } from "@/components/service-icon"
 import { StatusLabel } from "@/components/status"
@@ -23,15 +26,12 @@ import {
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { fmtMem, fmtPct, fmtRate, KIND_LABEL } from "@/lib/format"
+import { KIND_LABEL } from "@/lib/format"
+import { useLiveSample } from "@/lib/live-sample"
 import { useStore } from "@/lib/store"
 import { host, portConflicts, series, zip } from "@/mock/data"
 import { updates } from "@/mock/alerts"
 
-const cpuSeries = series(7, 60, 27, 14)
-const memSeries = series(11, 60, 63, 3)
-const rxSeries = series(21, 60, 4.8, 3, 0, 40)
-const txSeries = series(29, 60, 1.4, 1.2, 0, 40)
 const diskSeries = series(3, 60, 63, 0.2)
 
 function Metric({
@@ -48,9 +48,7 @@ function Metric({
   return (
     <div className="flex min-w-0 flex-col gap-2 p-4">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="tabular text-2xl font-semibold tracking-tight">
-        {value}
-      </span>
+      <span className="text-2xl font-semibold tracking-tight">{value}</span>
       <span className="truncate text-xs text-muted-foreground">{sub}</span>
       <Sparkline data={spark} className="mt-1" />
     </div>
@@ -60,6 +58,7 @@ function Metric({
 export function OverviewPage() {
   const state = useViewState()
   const { services } = useStore()
+  const live = useLiveSample()
   const [range, setRange] = React.useState("cpu")
   const conflicts = portConflicts()
   const disk = host.disks[0]
@@ -126,15 +125,15 @@ export function OverviewPage() {
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>*]:bg-card">
           <Metric
             label="CPU"
-            value={fmtPct(host.cpuPercent)}
+            value={<NumberRoll value={live.cpu} suffix="%" />}
             sub={`${host.cpu} ${host.cores}，${host.cpuTempC}°C，负载 ${host.load.join(" / ")}`}
-            spark={cpuSeries}
+            spark={live.cpuSeries}
           />
           <Metric
             label="内存"
             value={
               <>
-                {host.memUsedGB}
+                <NumberRoll value={live.memGB} />
                 <span className="text-base text-muted-foreground">
                   {" "}
                   / {host.memTotalGB} GB
@@ -142,7 +141,7 @@ export function OverviewPage() {
               </>
             }
             sub={`缓存 ${host.memCacheGB} GB，交换 ${host.swapUsedGB} / ${host.swapTotalGB} GB`}
-            spark={memSeries}
+            spark={live.memSeries}
           />
           <Metric
             label={`存储 ${disk.mount}`}
@@ -162,19 +161,19 @@ export function OverviewPage() {
             label="网络"
             value={
               <span className="flex items-baseline gap-3">
-                <span className="inline-flex items-center">
+                <span className="inline-flex items-center gap-0.5">
                   <IconArrowDown className="size-4 text-muted-foreground" />
-                  {host.netRxMBs}
+                  <NumberRoll value={live.rx} />
                 </span>
-                <span className="inline-flex items-center">
+                <span className="inline-flex items-center gap-0.5">
                   <IconArrowUp className="size-4 text-muted-foreground" />
-                  {host.netTxMBs}
+                  <NumberRoll value={live.tx} />
                 </span>
                 <span className="text-base text-muted-foreground">MB/s</span>
               </span>
             }
             sub={host.netIface}
-            spark={rxSeries}
+            spark={live.rxSeries}
           />
         </div>
       )}
@@ -200,7 +199,7 @@ export function OverviewPage() {
           <CardContent>
             {range === "cpu" && (
               <MetricChart
-                data={zip(["cpu"], [cpuSeries])}
+                data={zip(["cpu"], [live.cpuSeries])}
                 config={{ cpu: { label: "CPU %", color: "var(--foreground)" } }}
                 max={100}
                 height={220}
@@ -208,7 +207,7 @@ export function OverviewPage() {
             )}
             {range === "mem" && (
               <MetricChart
-                data={zip(["mem"], [memSeries])}
+                data={zip(["mem"], [live.memSeries])}
                 config={{
                   mem: { label: "内存 %", color: "var(--foreground)" },
                 }}
@@ -218,7 +217,7 @@ export function OverviewPage() {
             )}
             {range === "net" && (
               <MetricChart
-                data={zip(["rx", "tx"], [rxSeries, txSeries])}
+                data={zip(["rx", "tx"], [live.rxSeries, live.txSeries])}
                 config={{
                   rx: { label: "下行 MB/s", color: "var(--foreground)" },
                   tx: { label: "上行 MB/s", color: "var(--success)" },
@@ -283,7 +282,7 @@ export function OverviewPage() {
               <Link
                 key={s.id}
                 to={`/services/${s.id}`}
-                className="grid grid-cols-[1fr_5rem_5.5rem] items-center gap-4 px-4 py-2.5 hover:bg-muted/60 md:grid-cols-[1fr_6rem_6rem_7rem_7rem]"
+                className="group grid grid-cols-[1fr_5rem_5.5rem] items-center gap-4 px-4 py-2.5 transition-colors duration-200 ease-out hover:bg-muted/60 md:grid-cols-[1fr_6rem_6rem_7rem_7rem]"
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <ServiceIcon
@@ -291,11 +290,16 @@ export function OverviewPage() {
                     override={s.iconOverride}
                     kind={s.kind}
                     size="sm"
+                    layoutId={`icon-${s.id}`}
+                    className="transition-transform duration-200 ease-out group-hover:scale-105"
                   />
                   <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">
+                    <motion.span
+                      layoutId={`name-${s.id}`}
+                      className="truncate text-sm font-medium"
+                    >
                       {s.displayName}
-                    </span>
+                    </motion.span>
                     <span className="truncate text-xs text-muted-foreground">
                       {s.stack ? `${s.stack} / ` : ""}
                       {KIND_LABEL[s.kind]}
@@ -303,20 +307,30 @@ export function OverviewPage() {
                   </span>
                 </span>
                 <span className="relative text-right">
-                  <span className="tabular text-sm">{fmtPct(s.cpu)}</span>
+                  <span className="text-sm">
+                    <NumberRoll value={s.cpu} suffix="%" />
+                  </span>
                   <span
                     className="absolute right-0 -bottom-1.5 h-0.5 rounded-full bg-foreground/60"
                     style={{ width: `${Math.min(100, s.cpu * 2)}%` }}
                   />
                 </span>
-                <span className="tabular text-right text-sm">
-                  {fmtMem(s.memMB)}
+                <span className="text-right text-sm">
+                  <NumberRoll value={s.memMB} digits={0} suffix=" MB" />
                 </span>
-                <span className="tabular hidden text-right text-sm text-muted-foreground md:block">
-                  {fmtRate(s.netRxKBs)}
+                <span className="hidden text-right text-sm text-muted-foreground md:block">
+                  <NumberRoll
+                    value={s.netRxKBs >= 1024 ? s.netRxKBs / 1024 : s.netRxKBs}
+                    digits={s.netRxKBs >= 1024 ? 1 : 0}
+                    suffix={s.netRxKBs >= 1024 ? " MB/s" : " KB/s"}
+                  />
                 </span>
-                <span className="tabular hidden text-right text-sm text-muted-foreground md:block">
-                  {fmtRate(s.netTxKBs)}
+                <span className="hidden text-right text-sm text-muted-foreground md:block">
+                  <NumberRoll
+                    value={s.netTxKBs >= 1024 ? s.netTxKBs / 1024 : s.netTxKBs}
+                    digits={s.netTxKBs >= 1024 ? 1 : 0}
+                    suffix={s.netTxKBs >= 1024 ? " MB/s" : " KB/s"}
+                  />
                 </span>
               </Link>
             ))}

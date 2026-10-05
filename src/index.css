@@ -143,9 +143,65 @@
   }
 }
 
+@keyframes lumen-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.82); }
+}
+
+@keyframes lumen-pulse-once {
+  0% { transform: scale(1); opacity: 1; }
+  45% { transform: scale(1.85); opacity: 0.35; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes lumen-shimmer {
+  0% { background-position: 160% 0; }
+  100% { background-position: -60% 0; }
+}
+
+.lumen-breathe {
+  animation: lumen-breathe 2.4s ease-in-out infinite;
+}
+
+.lumen-pulse-once {
+  animation: lumen-pulse-once 280ms ease-out 1;
+}
+
+@keyframes lumen-ring {
+  from { stroke-dashoffset: 37.7; }
+  to { stroke-dashoffset: 0; }
+}
+
+.lumen-ring {
+  animation: lumen-ring 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lumen-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--muted) 42%,
+    color-mix(in oklch, var(--foreground) 8%, var(--muted)) 50%,
+    var(--muted) 58%,
+    var(--muted) 100%
+  );
+  background-size: 220% 100%;
+  animation: lumen-shimmer 1.5s ease-in-out infinite;
+}
+
+[data-sonner-toast] {
+  transition:
+    transform 280ms cubic-bezier(0.22, 1.25, 0.36, 1),
+    opacity 200ms ease-out,
+    height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms ease-out !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

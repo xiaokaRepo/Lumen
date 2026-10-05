@@ -1,4 +1,5 @@
 import * as React from "react"
+import { motion, useReducedMotion } from "motion/react"
 import {
   Link,
   NavLink,
@@ -358,6 +359,7 @@ function UserMenu() {
 
 export function AppShell() {
   const loc = useLocation()
+  const reduce = useReducedMotion()
   const seg = loc.pathname.split("/")[1] ?? ""
   return (
     <SidebarProvider>
@@ -384,8 +386,16 @@ export function AppShell() {
             <UserMenu />
           </div>
         </header>
-        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-6 px-4 py-6 md:px-6">
-          <Outlet />
+        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-4 py-6 md:px-6">
+          <motion.div
+            key={loc.pathname}
+            className="flex flex-1 flex-col gap-6"
+            initial={reduce ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Outlet />
+          </motion.div>
         </div>
       </SidebarInset>
     </SidebarProvider>

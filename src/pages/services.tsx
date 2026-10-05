@@ -1,4 +1,5 @@
 import * as React from "react"
+import { motion, useReducedMotion } from "motion/react"
 import { useNavigate } from "react-router-dom"
 import {
   IconCloudDownload,
@@ -7,6 +8,8 @@ import {
   IconStack2,
 } from "@tabler/icons-react"
 
+import { enterDelay, useEnterOnce } from "@/components/enter"
+import { NumberRoll } from "@/components/number-roll"
 import {
   EmptyState,
   ErrorState,
@@ -45,7 +48,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { fmtMem, fmtPct, KIND_LABEL } from "@/lib/format"
+import { KIND_LABEL } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { GROUPS, portConflicts, type Service } from "@/mock/data"
 import { updateFor } from "@/mock/alerts"
@@ -76,6 +79,8 @@ export function ServicesPage() {
   const state = useViewState()
   const nav = useNavigate()
   const { services } = useStore()
+  const enter = useEnterOnce("services")
+  const reduce = useReducedMotion()
   const [q, setQ] = React.useState("")
   const [kind, setKind] = React.useState("all")
   const [status, setStatus] = React.useState("all")
@@ -133,6 +138,14 @@ export function ServicesPage() {
             ),
           ] as [string, Service[]],
         ].filter(([, l]) => l.length)
+
+  const rowIndex = new Map<string, number>()
+  {
+    let n = 0
+    for (const [, list] of groups) {
+      for (const s of list) rowIndex.set(s.id, n++)
+    }
+  }
 
   const counts = {
     all: services.length,
@@ -288,89 +301,109 @@ export function ServicesPage() {
                       </span>
                     </TableCell>
                   </TableRow>
-                  {list.map((s) => (
-                    <TableRow
-                      key={s.id}
-                      className="cursor-pointer"
-                      onClick={() => nav(`/services/${s.id}`)}
-                    >
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-3">
-                          <ServiceIcon
-                            match={s.iconMatch}
-                            override={s.iconOverride}
-                            kind={s.kind}
-                          />
-                          <div className="flex min-w-0 flex-col">
-                            <span className="flex items-center gap-2 font-medium">
-                              {s.displayName}
-                              <UpdateBadge id={s.id} />
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {KIND_LABEL[s.kind]}
-                              {s.stack && groupBy === "group"
-                                ? ` / ${s.stack}`
-                                : ""}
-                            </span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusLabel s={s} />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex flex-nowrap gap-1">
-                          {s.ports.length === 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              无
-                            </span>
-                          )}
-                          {s.ports.slice(0, 2).map((p) => (
-                            <PortChip
-                              key={`${p.host}${p.proto}`}
-                              p={p}
-                              conflict={conflictPorts.has(
-                                `${s.id}:${p.host}/${p.proto}`
-                              )}
-                            />
-                          ))}
-                          {s.ports.length > 2 && (
-                            <span className="tabular self-center text-xs text-muted-foreground">
-                              +{s.ports.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden max-w-72 xl:table-cell">
-                        <span className="tabular block truncate text-xs text-muted-foreground">
-                          {s.image ?? s.unit ?? `PID ${s.pid}`}
-                        </span>
-                      </TableCell>
-                      <TableCell className="tabular text-right">
-                        {s.status === "running" ? (
-                          fmtPct(s.cpu)
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="tabular text-right">
-                        {s.memMB ? (
-                          fmtMem(s.memMB)
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden text-right text-muted-foreground lg:table-cell">
-                        {s.uptime}
-                      </TableCell>
-                      <TableCell
-                        className="pr-3"
-                        onClick={(e) => e.stopPropagation()}
+                  {list.map((s) => {
+                    const i = rowIndex.get(s.id) ?? 0
+                    const play = enter && !reduce && !q
+                    return (
+                      <motion.tr
+                        key={s.id}
+                        data-slot="table-row"
+                        className="cursor-pointer border-b transition-colors duration-200 ease-out hover:bg-muted/50 data-[state=selected]:bg-muted"
+                        onClick={() => nav(`/services/${s.id}`)}
+                        initial={play ? { opacity: 0, y: 6 } : false}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.22,
+                          delay: play ? enterDelay(i) : 0,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
                       >
-                        <ServiceActionsMenu s={s} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell className="pl-4">
+                          <div className="flex items-center gap-3">
+                            <ServiceIcon
+                              match={s.iconMatch}
+                              override={s.iconOverride}
+                              kind={s.kind}
+                              layoutId={`icon-${s.id}`}
+                              className="transition-transform duration-200 ease-out group-hover:scale-105"
+                            />
+                            <div className="flex min-w-0 flex-col">
+                              <span className="flex items-center gap-2 font-medium">
+                                <motion.span layoutId={`name-${s.id}`}>
+                                  {s.displayName}
+                                </motion.span>
+                                <UpdateBadge id={s.id} />
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {KIND_LABEL[s.kind]}
+                                {s.stack && groupBy === "group"
+                                  ? ` / ${s.stack}`
+                                  : ""}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <StatusLabel s={s} />
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex flex-nowrap gap-1">
+                            {s.ports.length === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                无
+                              </span>
+                            )}
+                            {s.ports.slice(0, 2).map((p) => (
+                              <PortChip
+                                key={`${p.host}${p.proto}`}
+                                p={p}
+                                conflict={conflictPorts.has(
+                                  `${s.id}:${p.host}/${p.proto}`
+                                )}
+                              />
+                            ))}
+                            {s.ports.length > 2 && (
+                              <span className="tabular self-center text-xs text-muted-foreground">
+                                +{s.ports.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden max-w-72 xl:table-cell">
+                          <span className="tabular block truncate text-xs text-muted-foreground">
+                            {s.image ?? s.unit ?? `PID ${s.pid}`}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {s.status === "running" ? (
+                            <NumberRoll value={s.cpu} suffix="%" />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {s.memMB ? (
+                            <NumberRoll
+                              value={s.memMB}
+                              digits={0}
+                              suffix=" MB"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden text-right text-muted-foreground lg:table-cell">
+                          {s.uptime}
+                        </TableCell>
+                        <TableCell
+                          className="pr-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ServiceActionsMenu s={s} />
+                        </TableCell>
+                      </motion.tr>
+                    )
+                  })}
                 </React.Fragment>
               ))}
             </TableBody>

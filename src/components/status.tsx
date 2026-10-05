@@ -45,20 +45,28 @@ export function StatusLabel({
 }) {
   const st = STATUS[s.status]
   const unhealthy = s.health === "unhealthy"
+  const error =
+    unhealthy ||
+    s.status === "restarting" ||
+    (s.status === "exited" && s.exitCode !== undefined && s.exitCode !== 0)
+  const breathe = s.status === "running" && !unhealthy
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 text-sm whitespace-nowrap",
+        "inline-flex items-center gap-2 text-sm whitespace-nowrap transition-colors duration-200 ease-out",
         st.text,
         unhealthy && "text-destructive",
         className
       )}
     >
       <span
+        key={error ? "error" : breathe ? "running" : s.status}
         className={cn(
-          "size-1.5 rounded-full",
+          "size-1.5 rounded-full transition-colors duration-200 ease-out",
           st.dot,
-          unhealthy && "bg-destructive"
+          unhealthy && "bg-destructive",
+          breathe && "lumen-breathe",
+          error && "lumen-pulse-once"
         )}
         aria-hidden
       />

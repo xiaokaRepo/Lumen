@@ -1,10 +1,9 @@
 import * as React from "react"
 import { Link, useParams } from "react-router-dom"
-import { toast } from "sonner"
+import { motion } from "motion/react"
 import {
   IconAlertTriangle,
   IconArrowLeft,
-  IconCopy,
   IconDots,
   IconDownload,
   IconExternalLink,
@@ -14,13 +13,15 @@ import {
   IconPlayerPause,
   IconPlayerPlay,
   IconPlayerStop,
-  IconRefresh,
   IconSearch,
 } from "@tabler/icons-react"
 
+import { CopyButton } from "@/components/copy-button"
 import { MetricChart } from "@/components/metric-chart"
+import { NumberRoll } from "@/components/number-roll"
 import { EmptyState } from "@/components/page-states"
 import {
+  RestartButton,
   ServiceActionsMenu,
   useServiceActions,
 } from "@/components/service-actions"
@@ -54,7 +55,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { fmtMem, fmtPct, fmtRate, KIND_LABEL } from "@/lib/format"
+import { KIND_LABEL } from "@/lib/format"
 import { useService } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { logsFor, portConflicts, series, zip, type Service } from "@/mock/data"
@@ -72,7 +73,7 @@ function Stat({
   return (
     <div className="flex flex-col gap-1 p-4">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="tabular text-lg font-semibold">{value}</span>
+      <span className="text-lg font-semibold">{value}</span>
       {sub && (
         <span className="tabular text-xs text-muted-foreground">{sub}</span>
       )}
@@ -80,15 +81,59 @@ function Stat({
   )
 }
 
+function useTail(seed: number, base: number, jitter: number, max: number) {
+  const [data, setData] = React.useState(() =>
+    series(seed, 60, base, jitter, 0, max)
+  )
+  React.useEffect(() => {
+    const id = window.setInterval(() => {
+      setData((prev) => {
+        const last = prev[prev.length - 1]?.v ?? base
+        const next = Math.min(
+          max,
+          Math.max(0, last + (Math.random() - 0.48) * jitter)
+        )
+        const d = new Date()
+        const p = (n: number) => String(n).padStart(2, "0")
+        const t = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+        return [...prev.slice(1), { t, v: Math.round(next * 10) / 10 }]
+      })
+    }, 2500)
+    return () => window.clearInterval(id)
+  }, [base, jitter, max])
+  return data
+}
+
 function Monitor({ s }: { s: Service }) {
   const [range, setRange] = React.useState("1h")
   const seed = s.id.length * 13
-  const cpu = series(seed, 60, Math.max(s.cpu, 0.5), Math.max(s.cpu * 0.6, 1))
-  const mem = series(seed + 3, 60, s.memMB, s.memMB * 0.05, 0, 100000)
-  const rx = series(seed + 5, 60, s.netRxKBs, s.netRxKBs * 0.8 + 1, 0, 100000)
-  const tx = series(seed + 7, 60, s.netTxKBs, s.netTxKBs * 0.8 + 1, 0, 100000)
-  const rd = series(seed + 9, 60, 1.8, 3, 0, 200)
-  const wr = series(seed + 11, 60, 0.9, 2, 0, 200)
+  const cpu = useTail(
+    seed,
+    Math.max(s.cpu, 0.5),
+    Math.max(s.cpu * 0.4, 0.8),
+    100
+  )
+  const mem = useTail(seed + 3, s.memMB, Math.max(s.memMB * 0.04, 4), 100000)
+  const rx = useTail(
+    seed + 5,
+    s.netRxKBs,
+    Math.max(s.netRxKBs * 0.3, 8),
+    100000
+  )
+  const tx = useTail(
+    seed + 7,
+    s.netTxKBs,
+    Math.max(s.netTxKBs * 0.3, 8),
+    100000
+  )
+  const rd = useTail(seed + 9, 1.8, 0.6, 200)
+  const wr = useTail(seed + 11, 0.9, 0.4, 200)
+  const cpuNow = cpu[cpu.length - 1]?.v ?? s.cpu
+  const memNow = mem[mem.length - 1]?.v ?? s.memMB
+  const rxNow = rx[rx.length - 1]?.v ?? s.netRxKBs
+  const txNow = tx[tx.length - 1]?.v ?? s.netTxKBs
+  const rdNow = rd[rd.length - 1]?.v ?? 1.8
+  const wrNow = wr[wr.length - 1]?.v ?? 0.9
 
   if (s.status !== "running")
     return (
@@ -102,18 +147,34 @@ function Monitor({ s }: { s: Service }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4 [&>*]:bg-card">
-        <Stat label="CPU" value={fmtPct(s.cpu)} sub="占 N100 4 线程" />
+        <Stat
+          label="CPU"
+          value={<NumberRoll value={cpuNow} suffix="%" />}
+          sub="占 N100 4 线程"
+        />
         <Stat
           label="内存"
-          value={fmtMem(s.memMB)}
-          sub={s.memLimitMB ? `限制 ${fmtMem(s.memLimitMB)}` : "未设限制"}
+          value={<NumberRoll value={memNow} digits={0} suffix=" MB" />}
+          sub={s.memLimitMB ? `限制 ${s.memLimitMB} MB` : "未设限制"}
         />
         <Stat
           label="网络"
-          value={fmtRate(s.netTxKBs)}
-          sub={`接收 ${fmtRate(s.netRxKBs)}`}
+          value={<NumberRoll value={txNow} digits={0} suffix=" KB/s" />}
+          sub={
+            <>
+              接收 <NumberRoll value={rxNow} digits={0} suffix=" KB/s" />
+            </>
+          }
         />
-        <Stat label="磁盘读写" value="1.8 MB/s" sub="写入 0.9 MB/s" />
+        <Stat
+          label="磁盘读写"
+          value={<NumberRoll value={rdNow} suffix=" MB/s" />}
+          sub={
+            <>
+              写入 <NumberRoll value={wrNow} suffix=" MB/s" />
+            </>
+          }
+        />
       </div>
       <div className="flex justify-end">
         <ToggleGroup
@@ -316,14 +377,11 @@ function EnvTab({ s }: { s: Service }) {
                     {reveal[e.key] ? <IconEyeOff /> : <IconEye />}
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="复制"
-                  onClick={() => toast.success(`已复制 ${e.key}`)}
-                >
-                  <IconCopy />
-                </Button>
+                <CopyButton
+                  text={e.value}
+                  label={`复制 ${e.key}`}
+                  toastLabel={`已复制 ${e.key}`}
+                />
               </TableCell>
             </TableRow>
           ))}
@@ -353,7 +411,8 @@ export function ServiceDetailPage() {
 }
 
 function Detail({ s }: { s: Service }) {
-  const { run, setConfirm, setEdit, dialogs, isNative } = useServiceActions(s)
+  const { run, restart, restarting, setConfirm, setEdit, dialogs, isNative } =
+    useServiceActions(s)
   const conflicts = portConflicts().filter((c) =>
     c.rows.some((r) => r.serviceId === s.id)
   )
@@ -376,12 +435,16 @@ function Detail({ s }: { s: Service }) {
             override={s.iconOverride}
             kind={s.kind}
             size="xl"
+            layoutId={`icon-${s.id}`}
           />
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">
+              <motion.h1
+                layoutId={`name-${s.id}`}
+                className="text-xl font-semibold tracking-tight"
+              >
                 {s.displayName}
-              </h1>
+              </motion.h1>
               <UpdateBadge id={s.id} />
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -425,10 +488,7 @@ function Detail({ s }: { s: Service }) {
                 {s.status === "paused" ? "恢复" : "启动"}
               </Button>
             )}
-            <Button variant="outline" onClick={() => run("重启")}>
-              <IconRefresh data-icon="inline-start" />
-              重启
-            </Button>
+            <RestartButton busy={restarting} onClick={restart} />
             {!isNative && running && (
               <Button variant="outline" onClick={() => run("暂停")}>
                 <IconPlayerPause data-icon="inline-start" />
@@ -624,10 +684,14 @@ function Detail({ s }: { s: Service }) {
             <CardHeader>
               <CardTitle>{isNative ? "进程信息" : "容器信息"}</CardTitle>
               <CardAction>
-                <Button variant="ghost" size="sm">
-                  <IconCopy data-icon="inline-start" />
+                <CopyButton
+                  variant="ghost"
+                  size="sm"
+                  text={isNative ? (s.unit ?? s.name) : (s.image ?? s.name)}
+                  label={isNative ? "复制单元文件" : "复制 docker inspect"}
+                >
                   {isNative ? "复制单元文件" : "复制 docker inspect"}
-                </Button>
+                </CopyButton>
               </CardAction>
             </CardHeader>
             <CardContent>
