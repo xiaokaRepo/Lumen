@@ -53,8 +53,8 @@ export function useServiceActions(s: Service) {
     label: string,
     opts?: { removeVolumes?: boolean }
   ) => {
-    if (isNative) {
-      toast.error("主机进程和 systemd 会在下一期接入")
+    if (s.kind === "process") {
+      toast.error("主机进程请在进程页发送信号")
       return
     }
     const started = performance.now()

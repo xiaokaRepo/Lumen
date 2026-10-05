@@ -37,10 +37,12 @@ type Mount struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
 	Mode   string `json:"mode"`
+	Name   string `json:"name,omitempty"`
 }
 
 type Service struct {
 	ID            string         `json:"id"`
+	ContainerID   string         `json:"containerId,omitempty"`
 	Name          string         `json:"name"`
 	DisplayName   string         `json:"displayName"`
 	Kind          string         `json:"kind"`
@@ -226,6 +228,7 @@ func (m *Manager) inspect(ctx context.Context, id string, meta map[string]store.
 	sort.Strings(nets)
 	svc := Service{
 		ID:            name,
+		ContainerID:   info.ID,
 		Name:          name,
 		DisplayName:   display,
 		Kind:          kind,
@@ -491,7 +494,7 @@ func mountsOf(info *types.ContainerJSON) []Mount {
 		if typ == "" {
 			typ = "bind"
 		}
-		out = append(out, Mount{Type: typ, Source: m.Source, Target: m.Destination, Mode: mode})
+		out = append(out, Mount{Type: typ, Source: m.Source, Target: m.Destination, Mode: mode, Name: m.Name})
 	}
 	if out == nil {
 		out = []Mount{}

@@ -85,9 +85,12 @@ export const api = {
       await fetch("/api/logout", { method: "POST", credentials: "include" })
     ),
   snapshot: async () =>
-    parse<{ host: HostInfo; services: Service[]; dockerError: string }>(
-      await fetch("/api/snapshot", { credentials: "include" })
-    ),
+    parse<{
+      host: HostInfo
+      services: Service[]
+      dockerError: string
+      systemdNote?: string
+    }>(await fetch("/api/snapshot", { credentials: "include" })),
   logs: async (id: string) =>
     parse<{ lines: LogLine[] }>(
       await fetch(`/api/services/${encodeURIComponent(id)}/logs`, {
@@ -112,6 +115,167 @@ export const api = {
         body: JSON.stringify(body),
       })
     ),
+  processes: async () =>
+    parse<{ processes: Proc[] }>(
+      await fetch("/api/processes", { credentials: "include" })
+    ),
+  signal: async (pid: number, signal: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/processes/${pid}/signal`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signal }),
+      })
+    ),
+  renice: async (pid: number, nice: number) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/processes/${pid}/nice`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nice }),
+      })
+    ),
+  metrics: async (id: string, range: string) =>
+    parse<MetricSeries>(
+      await fetch(
+        `/api/metrics?id=${encodeURIComponent(id)}&range=${encodeURIComponent(range)}`,
+        { credentials: "include" }
+      )
+    ),
+  images: async () =>
+    parse<{ images: ImageRow[] }>(
+      await fetch("/api/images", { credentials: "include" })
+    ),
+  deleteImage: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/images/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+    ),
+  pullImage: async (ref: string) =>
+    parse<{ ok: boolean }>(
+      await fetch("/api/images/pull", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ref }),
+      })
+    ),
+  pruneImages: async () =>
+    parse<{ removed: number }>(
+      await fetch("/api/images/prune", {
+        method: "POST",
+        credentials: "include",
+      })
+    ),
+  networks: async () =>
+    parse<{ networks: NetworkRow[] }>(
+      await fetch("/api/networks", { credentials: "include" })
+    ),
+  createNetwork: async (name: string, driver: string, subnet: string) =>
+    parse<{ ok: boolean }>(
+      await fetch("/api/networks", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, driver, subnet }),
+      })
+    ),
+  deleteNetwork: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/networks/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+    ),
+  volumes: async () =>
+    parse<{ volumes: VolumeRow[] }>(
+      await fetch("/api/volumes", { credentials: "include" })
+    ),
+  deleteVolume: async (id: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/volumes/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+    ),
+  pruneVolumes: async () =>
+    parse<{ removed: number }>(
+      await fetch("/api/volumes/prune", {
+        method: "POST",
+        credentials: "include",
+      })
+    ),
+  stack: async (id: string, action: string) =>
+    parse<{ ok: boolean }>(
+      await fetch(`/api/stacks/${encodeURIComponent(id)}/action`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+    ),
+}
+
+export interface Proc {
+  pid: number
+  name: string
+  user: string
+  cpu: number
+  memMB: number
+  nice: number
+  state: "R" | "S" | "D" | "T" | "Z"
+  threads: number
+  started: string
+  command: string
+  serviceId?: string
+  protected?: boolean
+}
+
+export interface MetricPoint {
+  t: string
+  v: number
+}
+
+export interface MetricSeries {
+  cpu: MetricPoint[]
+  mem: MetricPoint[]
+  rx: MetricPoint[]
+  tx: MetricPoint[]
+  rd: MetricPoint[]
+  wr: MetricPoint[]
+}
+
+export interface ImageRow {
+  repo: string
+  tag: string
+  id: string
+  sizeMB: number
+  created: string
+  usedBy: string[]
+  update?: string
+}
+
+export interface NetworkRow {
+  name: string
+  driver: string
+  subnet?: string
+  gateway?: string
+  scope: string
+  members: string[]
+  internal?: boolean
+}
+
+export interface VolumeRow {
+  name: string
+  driver: string
+  sizeMB: number
+  mountpoint: string
+  usedBy: string[]
+  created: string
 }
 
 export const EMPTY_HOST: HostInfo = {

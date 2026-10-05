@@ -16,10 +16,19 @@ import {
   PageHeader,
   TableSkeleton,
   useViewState,
+  type ViewState,
 } from "@/components/page-states"
 import { ServiceIcon } from "@/components/service-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +36,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Field, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import {
   Table,
   TableBody,
@@ -36,9 +47,42 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import {
+  api,
+  type ImageRow,
+  type NetworkRow,
+  type VolumeRow,
+} from "@/lib/api"
 import { fmtMem } from "@/lib/format"
 import { useStore } from "@/lib/store"
-import { images, networks, volumes } from "@/mock/data"
+
+function useResource<T>(load: () => Promise<T[]>) {
+  const preview = useViewState()
+  const [rows, setRows] = React.useState<T[] | null>(null)
+  const [err, setErr] = React.useState("")
+  const reload = React.useCallback(() => {
+    load()
+      .then((list) => {
+        setRows(list)
+        setErr("")
+      })
+      .catch((e: Error) => setErr(e.message))
+  }, [load])
+  React.useEffect(() => {
+    reload()
+  }, [reload])
+  const state: ViewState =
+    preview !== "ready"
+      ? preview
+      : err
+        ? "error"
+        : rows === null
+          ? "loading"
+          : rows.length === 0
+            ? "empty"
+            : "ready"
+  return { rows: rows ?? [], state, err, reload }
+}
 
 function UsedBy({ ids }: { ids: string[] }) {
   const { services } = useStore()
@@ -48,7 +92,12 @@ function UsedBy({ ids }: { ids: string[] }) {
     <div className="flex items-center -space-x-1.5">
       {ids.slice(0, 5).map((id) => {
         const s = services.find((x) => x.id === id)
-        if (!s) return null
+        if (!s)
+          return (
+            <span key={id} className="pl-2 text-xs text-muted-foreground">
+              {id}
+            </span>
+          )
         return (
           <Link
             key={id}
@@ -72,7 +121,7 @@ function UsedBy({ ids }: { ids: string[] }) {
       )}
       {ids.length === 1 && (
         <span className="pl-3 text-sm">
-          {services.find((x) => x.id === ids[0])?.displayName}
+          {services.find((x) => x.id === ids[0])?.displayName ?? ids[0]}
         </span>
       )}
     </div>
@@ -82,7 +131,12 @@ function UsedBy({ ids }: { ids: string[] }) {
 function RowMenu({
   items,
 }: {
-  items: { label: string; danger?: boolean; disabled?: boolean }[]
+  items: {
+    label: string
+    danger?: boolean
+    disabled?: boolean
+    onSelect?: () => void
+  }[]
 }) {
   return (
     <DropdownMenu>
@@ -98,7 +152,7 @@ function RowMenu({
             <DropdownMenuItem
               variant={it.danger ? "destructive" : "default"}
               disabled={it.disabled}
-              onSelect={() => toast.success(it.label)}
+              onSelect={() => it.onSelect?.()}
             >
               {it.label}
             </DropdownMenuItem>
@@ -109,9 +163,25 @@ function RowMenu({
   )
 }
 
+function fail(e: unknown) {
+  toast.error(e instanceof Error ? e.message : "操作失败")
+}
+
+async function copyText(text: string, label: string) {
+  await navigator.clipboard.writeText(text)
+  toast.success(`已复制${label}`)
+}
+
 export function ImagesPage() {
-  const state = useViewState()
+  const loadImages = React.useCallback(
+    () => api.images().then((d) => d.images),
+    []
+  )
+  const { rows: images, state, err, reload } = useResource<ImageRow>(loadImages)
   const [filter, setFilter] = React.useState("all")
+  const [pullOpen, setPullOpen] = React.useState(false)
+  const [ref, setRef] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
   const unused = images.filter((i) => !i.usedBy.length)
   const reclaim = unused.reduce((a, b) => a + b.sizeMB, 0)
   const total = images.reduce((a, b) => a + b.sizeMB, 0)
@@ -121,6 +191,21 @@ export function ImagesPage() {
       : filter === "update"
         ? images.filter((i) => i.update)
         : images
+
+  const pull = (name: string) => {
+    setBusy(true)
+    api
+      .pullImage(name)
+      .then(() => {
+        toast.success("已拉取镜像", { description: name })
+        setPullOpen(false)
+        setRef("")
+        reload()
+      })
+      .catch(fail)
+      .finally(() => setBusy(false))
+  }
+
   return (
     <>
       <PageHeader
@@ -128,16 +213,21 @@ export function ImagesPage() {
         description={`${images.length} 个镜像，共 ${fmtMem(total)}。未使用的镜像可释放 ${fmtMem(reclaim)}。`}
         actions={
           <>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => setPullOpen(true)}>
               <IconCloudDownload data-icon="inline-start" />
               拉取镜像
             </Button>
             <Button
               variant="outline"
+              disabled={!unused.length}
               onClick={() =>
-                toast.success("已清理未使用镜像", {
-                  description: `释放 ${fmtMem(reclaim)}`,
-                })
+                api
+                  .pruneImages()
+                  .then((d) => {
+                    toast.success(`已清理 ${d.removed} 个未使用镜像`)
+                    reload()
+                  })
+                  .catch(fail)
               }
             >
               <IconTrash data-icon="inline-start" />
@@ -169,7 +259,7 @@ export function ImagesPage() {
         </ToggleGroupItem>
       </ToggleGroup>
       {state === "loading" && <TableSkeleton />}
-      {state === "error" && <ErrorState />}
+      {state === "error" && <ErrorState message={err} />}
       {state === "empty" && (
         <EmptyState
           icon={<IconBox />}
@@ -193,7 +283,7 @@ export function ImagesPage() {
             </TableHeader>
             <TableBody>
               {list.map((i) => (
-                <TableRow key={i.id}>
+                <TableRow key={i.id + i.repo + i.tag}>
                   <TableCell className="tabular max-w-[22rem] truncate pl-4 text-xs">
                     {i.repo}
                   </TableCell>
@@ -225,12 +315,27 @@ export function ImagesPage() {
                   <TableCell className="pr-3">
                     <RowMenu
                       items={[
-                        { label: "拉取最新" },
-                        { label: "复制镜像 ID" },
+                        {
+                          label: "拉取最新",
+                          disabled: i.repo === "<none>",
+                          onSelect: () => pull(`${i.repo}:${i.tag}`),
+                        },
+                        {
+                          label: "复制镜像 ID",
+                          onSelect: () => void copyText(i.id, "镜像 ID"),
+                        },
                         {
                           label: "删除镜像",
                           danger: true,
                           disabled: i.usedBy.length > 0,
+                          onSelect: () =>
+                            api
+                              .deleteImage(i.id)
+                              .then(() => {
+                                toast.success("已删除镜像")
+                                reload()
+                              })
+                              .catch(fail),
                         },
                       ]}
                     />
@@ -241,26 +346,65 @@ export function ImagesPage() {
           </Table>
         </div>
       )}
+      <Dialog open={pullOpen} onOpenChange={setPullOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>拉取镜像</DialogTitle>
+            <DialogDescription>
+              写入仓库和标签，例如 nginx:alpine。只下载镜像，不创建容器。
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="img-ref">镜像</FieldLabel>
+            <Input
+              id="img-ref"
+              value={ref}
+              placeholder="nginx:alpine"
+              onChange={(e) => setRef(e.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPullOpen(false)}>
+              取消
+            </Button>
+            <Button disabled={busy || !ref.trim()} onClick={() => pull(ref.trim())}>
+              拉取
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
 
+const BUILTIN_NETS = new Set(["bridge", "host", "none"])
+
 export function NetworksPage() {
-  const state = useViewState()
+  const loadNets = React.useCallback(
+    () => api.networks().then((d) => d.networks),
+    []
+  )
+  const { rows: networks, state, err, reload } =
+    useResource<NetworkRow>(loadNets)
+  const [open, setOpen] = React.useState(false)
+  const [name, setName] = React.useState("")
+  const [subnet, setSubnet] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+
   return (
     <>
       <PageHeader
         title="网络"
         description="Docker 网络和接入的服务。默认网络 bridge、host、none 不能删除。"
         actions={
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setOpen(true)}>
             <IconPlus data-icon="inline-start" />
             创建网络
           </Button>
         }
       />
       {state === "loading" && <TableSkeleton />}
-      {state === "error" && <ErrorState />}
+      {state === "error" && <ErrorState message={err} />}
       {(state === "ready" || state === "empty") && (
         <div className="overflow-hidden rounded-xl border bg-card">
           <Table>
@@ -297,13 +441,23 @@ export function NetworksPage() {
                   <TableCell className="pr-3">
                     <RowMenu
                       items={[
-                        { label: "查看详情" },
+                        {
+                          label: "复制名称",
+                          onSelect: () => void copyText(n.name, "网络名"),
+                        },
                         {
                           label: "删除网络",
                           danger: true,
                           disabled:
-                            ["bridge", "host", "none"].includes(n.name) ||
-                            n.members.length > 0,
+                            BUILTIN_NETS.has(n.name) || n.members.length > 0,
+                          onSelect: () =>
+                            api
+                              .deleteNetwork(n.name)
+                              .then(() => {
+                                toast.success("已删除网络")
+                                reload()
+                              })
+                              .catch(fail),
                         },
                       ]}
                     />
@@ -314,22 +468,87 @@ export function NetworksPage() {
           </Table>
         </div>
       )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>创建网络</DialogTitle>
+            <DialogDescription>
+              创建一个 bridge 网络。子网可留空，由 Docker 分配。
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="net-name">名称</FieldLabel>
+            <Input
+              id="net-name"
+              value={name}
+              placeholder="lab"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="net-subnet">子网</FieldLabel>
+            <Input
+              id="net-subnet"
+              value={subnet}
+              placeholder="172.28.0.0/16"
+              onChange={(e) => setSubnet(e.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button
+              disabled={busy || !name.trim()}
+              onClick={() => {
+                setBusy(true)
+                api
+                  .createNetwork(name.trim(), "bridge", subnet.trim())
+                  .then(() => {
+                    toast.success("已创建网络", { description: name.trim() })
+                    setOpen(false)
+                    setName("")
+                    setSubnet("")
+                    reload()
+                  })
+                  .catch(fail)
+                  .finally(() => setBusy(false))
+              }}
+            >
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
 
 export function VolumesPage() {
-  const state = useViewState()
+  const loadVols = React.useCallback(
+    () => api.volumes().then((d) => d.volumes),
+    []
+  )
+  const { rows: volumes, state, err, reload } = useResource<VolumeRow>(loadVols)
   const unused = volumes.filter((v) => !v.usedBy.length)
   return (
     <>
       <PageHeader
         title="存储卷"
-        description={`${volumes.length} 个命名卷，${unused.length} 个未被任何容器使用。绑定挂载目录请在服务详情的“存储”中查看。`}
+        description={`${volumes.length} 个命名卷，${unused.length} 个未被任何容器使用。绑定挂载目录请在服务详情的存储中查看。`}
         actions={
           <Button
             variant="outline"
-            onClick={() => toast.success("已清理未使用的卷")}
+            disabled={!unused.length}
+            onClick={() =>
+              api
+                .pruneVolumes()
+                .then((d) => {
+                  toast.success(`已清理 ${d.removed} 个未使用的卷`)
+                  reload()
+                })
+                .catch(fail)
+            }
           >
             <IconTrash data-icon="inline-start" />
             清理未使用
@@ -337,12 +556,12 @@ export function VolumesPage() {
         }
       />
       {state === "loading" && <TableSkeleton />}
-      {state === "error" && <ErrorState />}
+      {state === "error" && <ErrorState message={err} />}
       {state === "empty" && (
         <EmptyState
           icon={<IconDatabase />}
           title="没有命名卷"
-          description="当前服务都使用绑定挂载，数据直接存放在 /volume1 下。"
+          description="当前容器都使用绑定挂载，或者还没有创建命名卷。"
         />
       )}
       {state === "ready" && (
@@ -379,11 +598,22 @@ export function VolumesPage() {
                   <TableCell className="pr-3">
                     <RowMenu
                       items={[
-                        { label: "在文件管理中打开" },
+                        {
+                          label: "复制挂载点",
+                          onSelect: () => void copyText(v.mountpoint, "挂载点"),
+                        },
                         {
                           label: "删除卷",
                           danger: true,
                           disabled: v.usedBy.length > 0,
+                          onSelect: () =>
+                            api
+                              .deleteVolume(v.name)
+                              .then(() => {
+                                toast.success("已删除卷")
+                                reload()
+                              })
+                              .catch(fail),
                         },
                       ]}
                     />

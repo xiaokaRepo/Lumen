@@ -1,6 +1,7 @@
 import * as React from "react"
 import { motion, useReducedMotion } from "motion/react"
 import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import {
   IconCloudDownload,
   IconRefresh,
@@ -48,6 +49,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { api } from "@/lib/api"
 import { KIND_LABEL } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import { groupNames, portConflicts } from "@/lib/ports"
@@ -311,6 +313,26 @@ export function ServicesPage() {
                       <span className="tabular ml-2 font-normal">
                         {list.length}
                       </span>
+                      {list[0]?.stack &&
+                        list.every((s) => s.stack === list[0].stack) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ml-2 h-6 px-2 text-xs"
+                            onClick={() => {
+                              const stack = list[0].stack!
+                              api
+                                .stack(stack, "restart")
+                                .then(() => {
+                                  toast.success(`已重启 ${stack}`)
+                                  void refresh()
+                                })
+                                .catch((e: Error) => toast.error(e.message))
+                            }}
+                          >
+                            重启栈
+                          </Button>
+                        )}
                     </TableCell>
                   </TableRow>
                   {list.map((s) => {

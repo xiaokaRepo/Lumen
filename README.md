@@ -2,7 +2,7 @@
 
 Docker, process and service management panel for a UGREEN DXP4800 NAS.
 
-Phase 1 serves the panel from one Go process: container discovery, status, ports, icons, live CPU/memory/network, container actions, logs, and a single admin password. Later pages (processes, alerts, image updates) still use the UI shell.
+The panel is one Go process. Containers, ports, icons, logs, and password login are in place. Processes, compose stacks, images, networks, volumes, and metric history read the host and the Docker socket. Alerts and image-update checks are still the UI shell.
 
 - Stack: React 19, Vite 8, Tailwind v4, shadcn/ui (preset `bYAK`: radix-nova, neutral, Tabler icons, Inter), Recharts, dnd-kit, react-router.
 - Design rules: `taste-skill` v2 (`.agents/skills/design-taste-frontend`), installed with `npx skills add Leonxlnx/taste-skill`.

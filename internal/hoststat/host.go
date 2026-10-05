@@ -309,6 +309,18 @@ func formatUptime(sec uint64) string {
 	return itoa(int(m)) + " 分钟"
 }
 
+func DiskBytes() (read, write uint64) {
+	counters, err := disk.IOCounters()
+	if err != nil {
+		return 0, 0
+	}
+	for _, c := range counters {
+		read += c.ReadBytes
+		write += c.WriteBytes
+	}
+	return read, write
+}
+
 func round1(v float64) float64 { return math.Round(v*10) / 10 }
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
 

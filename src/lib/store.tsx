@@ -31,6 +31,7 @@ interface Store {
   services: Service[]
   series: Series
   dockerError: string
+  systemdNote: string
   updateMeta: (id: string, meta: ServiceMeta) => Promise<void>
   act: (
     id: string,
@@ -70,6 +71,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [services, setServices] = React.useState<Service[]>([])
   const [series, setSeries] = React.useState<Series>(emptySeries)
   const [dockerError, setDockerError] = React.useState("")
+  const [systemdNote, setSystemdNote] = React.useState("")
   const [overlay, setOverlay] = React.useState<Record<string, ServiceStatus>>(
     {}
   )
@@ -97,6 +99,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     applyHost(snap.host)
     setServices(snap.services)
     setDockerError(snap.dockerError || "")
+    setSystemdNote(snap.systemdNote || "")
     setError(snap.dockerError ? "Docker 不可用：" + snap.dockerError : "")
     setHomeOrder((prev) => {
       const ids = snap.services.map((s) => s.id)
@@ -154,6 +157,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       services: shown,
       series,
       dockerError,
+      systemdNote,
       homeOrder,
       setHomeOrder,
       refresh,
@@ -212,6 +216,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       shown,
       series,
       dockerError,
+      systemdNote,
       homeOrder,
       refresh,
     ]
